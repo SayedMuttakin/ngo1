@@ -28,7 +28,7 @@ const PendingInstallments = () => {
       // Fetch pending installments (with cache busting)
       const pendingResponse = await installmentsAPI.getAll({
         status: 'pending',
-        limit: 1000,
+        limit: 10000,
         populate: true,
         _t: timestamp // Cache busting timestamp
       });
@@ -41,7 +41,7 @@ const PendingInstallments = () => {
       // Fetch partial installments (with cache busting)
       const partialResponse = await installmentsAPI.getAll({
         status: 'partial',
-        limit: 1000,
+        limit: 10000,
         populate: true,
         _t: timestamp // Cache busting timestamp
       });
