@@ -2103,6 +2103,7 @@ router.get('/', protect, async (req, res) => {
       limit = 10,
       startDate,
       endDate,
+      dueDateBefore,
       collectorId,
       memberId,
       branchCode,
@@ -2115,11 +2116,18 @@ router.get('/', protect, async (req, res) => {
     // Build filter object
     const filter = { isActive: true };
 
-    // Date range filter
+    // Date range filter (for collectionDate)
     if (startDate || endDate) {
       filter.collectionDate = {};
       if (startDate) filter.collectionDate.$gte = new Date(startDate);
       if (endDate) filter.collectionDate.$lte = new Date(endDate);
+    }
+
+    // ✅ Due date filter - filter by dueDate (matches collectorDashboard logic)
+    if (dueDateBefore) {
+      const dueDateEnd = new Date(dueDateBefore);
+      dueDateEnd.setHours(23, 59, 59, 999);
+      filter.dueDate = { $lte: dueDateEnd };
     }
 
     if (collectorId) filter.collector = collectorId;

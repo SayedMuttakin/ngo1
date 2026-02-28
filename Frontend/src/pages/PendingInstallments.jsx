@@ -19,18 +19,20 @@ const PendingInstallments = () => {
     console.log('🔄 fetchPendingInstallments called at:', new Date().toLocaleTimeString());
     setLoading(true);
     try {
+      // ✅ Use today's date as dueDateBefore filter — matches collectorDashboard logic
       const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD format
 
       const timestamp = Date.now();
       console.log('🕑 Cache busting timestamp:', timestamp);
 
-      // Fetch pending installments (with cache busting)
+      // Fetch pending installments with dueDate <= today (backend filtering)
       const pendingResponse = await installmentsAPI.getAll({
         status: 'pending',
         limit: 10000,
+        dueDateBefore: todayStr,
         populate: true,
-        _t: timestamp // Cache busting timestamp
+        _t: timestamp
       });
 
       console.log('🟡 Pending response:', {
@@ -38,12 +40,13 @@ const PendingInstallments = () => {
         count: pendingResponse.data?.length || 0
       });
 
-      // Fetch partial installments (with cache busting)
+      // Fetch partial installments with dueDate <= today (backend filtering)
       const partialResponse = await installmentsAPI.getAll({
         status: 'partial',
         limit: 10000,
+        dueDateBefore: todayStr,
         populate: true,
-        _t: timestamp // Cache busting timestamp
+        _t: timestamp
       });
 
       console.log('🟡 Partial response:', {
@@ -56,27 +59,14 @@ const PendingInstallments = () => {
         ...(partialResponse.success ? partialResponse.data || [] : [])
       ];
 
-      console.log('📦 Total installments fetched:', allInstallments.length);
+      console.log('📦 Total installments fetched (due today or overdue):', allInstallments.length);
 
-      // Filter installments that are due today or overdue AND have active members
+      // ✅ Only filter out inactive members — date filtering is now done by backend
       const dueInstallments = allInstallments.filter(inst => {
-        // ✅ Skip if member is inactive/deleted
         if (!inst.member || inst.member.isActive === false) {
-          console.log('⚠️ Skipping installment for inactive member:', inst.member?.name);
           return false;
         }
-
-        // Use dueDate if available, otherwise use collectionDate
-        const dateToCheck = inst.dueDate || inst.collectionDate;
-
-        // If no date at all, consider it as pending
-        if (!dateToCheck) return true;
-
-        const checkDate = new Date(dateToCheck);
-        checkDate.setHours(0, 0, 0, 0);
-
-        // Include if date has passed or is today
-        return checkDate <= today;
+        return true;
       });
 
       // Sort by due date (oldest first)
