@@ -35,6 +35,12 @@ const Installments = () => {
         if (branch) setSelectedBranch(branch);
         if (dashboard !== undefined) setShowDashboard(dashboard);
 
+        // If directMember is set (coming from Pending Installments page)
+        if (directMember && branch) {
+          setSelectedBranch(branch);
+          setShowDashboard(false);
+          localStorage.setItem('autoOpenMember', JSON.stringify(directMember));
+        }
 
       } catch (error) {
         localStorage.removeItem('installmentCollectionState');
@@ -64,6 +70,11 @@ const Installments = () => {
           if (branch) setSelectedBranch(branch);
           if (dashboard !== undefined) setShowDashboard(dashboard);
 
+          if (directMember && branch) {
+            setSelectedBranch(branch);
+            setShowDashboard(false);
+            localStorage.setItem('autoOpenMember', JSON.stringify(directMember));
+          }
 
         } catch (error) {
           localStorage.removeItem('installmentCollectionState');
