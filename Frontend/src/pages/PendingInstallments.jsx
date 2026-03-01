@@ -59,10 +59,10 @@ const PendingInstallments = () => {
             collectorsWithDue.sort((a, b) => b.dueBalance - a.dueBalance);
             setCollectorsData(collectorsWithDue);
             setLastUpdated(new Date());
-            if (showToast) toast.success('ডেটা আপডেট হয়েছে');
+            if (showToast) toast.success('Data updated successfully');
         } catch (error) {
             console.error('Error fetching pending data:', error);
-            toast.error('ডেটা লোড করতে ব্যর্থ হয়েছে');
+            toast.error('Failed to load data');
         } finally {
             setLoading(false);
         }
@@ -138,7 +138,7 @@ const PendingInstallments = () => {
             ));
         } catch (error) {
             console.error('Error fetching collector members:', error);
-            toast.error('সদস্যদের ডেটা লোড করতে ব্যর্থ');
+            toast.error('Failed to load member data');
         } finally {
             setLoadingMembers(prev => ({ ...prev, [collectorId]: false }));
         }
@@ -206,7 +206,7 @@ const PendingInstallments = () => {
                             <Bell className="h-7 w-7" />
                             Pending Installments
                         </h1>
-                        <p className="text-indigo-200 mt-1">আজকের ও বকেয়া কিস্তির তালিকা</p>
+                        <p className="text-indigo-200 mt-1">Today's and overdue installment list</p>
                     </div>
                     <button
                         onClick={() => {
@@ -249,7 +249,7 @@ const PendingInstallments = () => {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <input
                             type="text"
-                            placeholder="সদস্যের নাম, ফোন নম্বর দিয়ে খুঁজুন..."
+                            placeholder="Search by name, phone, or branch code..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
@@ -262,7 +262,7 @@ const PendingInstallments = () => {
                             onChange={(e) => setSelectedCollector(e.target.value)}
                             className="pl-10 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white appearance-none cursor-pointer min-w-[180px]"
                         >
-                            <option value="all">সব Collector</option>
+                            <option value="all">All Collectors</option>
                             {collectorsData.map(c => (
                                 <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
@@ -336,12 +336,12 @@ const PendingInstallments = () => {
                                 {isLoadingMembers ? (
                                     <div className="flex items-center justify-center py-8">
                                         <Loader className="h-6 w-6 text-indigo-500 animate-spin" />
-                                        <span className="ml-3 text-gray-500">সদস্যদের ডেটা লোড হচ্ছে...</span>
+                                        <span className="ml-3 text-gray-500">Loading member data...</span>
                                     </div>
                                 ) : filteredMembers.length === 0 ? (
                                     <div className="text-center py-8 text-gray-500">
                                         <Users className="h-10 w-10 mx-auto text-gray-300 mb-2" />
-                                        <p>কোনো বকেয়া কিস্তি পাওয়া যায়নি</p>
+                                        <p>No pending installments found</p>
                                     </div>
                                 ) : (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
@@ -402,8 +402,8 @@ const PendingInstallments = () => {
             {!loading && filteredCollectors.every(c => c.dueBalance <= 0) && (
                 <div className="text-center py-16 bg-white rounded-xl shadow-lg">
                     <Bell className="h-16 w-16 text-gray-200 mx-auto mb-4" />
-                    <h3 className="text-xl font-bold text-gray-700">কোনো বকেয়া কিস্তি নেই!</h3>
-                    <p className="text-gray-500 mt-2">সব কিস্তি পরিশোধ হয়ে গেছে</p>
+                    <h3 className="text-xl font-bold text-gray-700">No Pending Installments!</h3>
+                    <p className="text-gray-500 mt-2">All installments have been paid</p>
                 </div>
             )}
         </div>
