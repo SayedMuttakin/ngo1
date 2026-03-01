@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Search, Filter, UserPlus } from 'lucide-react';
+import { Users, Search, Filter, UserPlus, ChevronLeft, ChevronRight } from 'lucide-react';
 import MemberCard from '../components/members/MemberCard';
 import MemberForm from '../components/members/MemberForm';
 import { membersAPI } from '../utils/api';
@@ -12,6 +12,8 @@ const Members = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [loading, setLoading] = useState(true);
   const [members, setMembers] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const MEMBERS_PER_PAGE = 50;
 
   // Mock data for fallback (empty - will show "no members found")
   const mockMembers = [];
@@ -87,6 +89,16 @@ const Members = () => {
 
     return matchesSearch && matchesStatus;
   });
+
+  // Pagination
+  const totalPages = Math.ceil(filteredMembers.length / MEMBERS_PER_PAGE);
+  const startIndex = (currentPage - 1) * MEMBERS_PER_PAGE;
+  const paginatedMembers = filteredMembers.slice(startIndex, startIndex + MEMBERS_PER_PAGE);
+
+  // Reset to page 1 when search/filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterStatus]);
 
   // Handle member actions
   const handleEditMember = async (memberData) => {
@@ -241,7 +253,7 @@ const Members = () => {
                   )}
                 </div>
               ) : (
-                filteredMembers.map((member) => (
+                paginatedMembers.map((member) => (
                   <MemberCard
                     key={member._id || member.id}
                     member={member}
@@ -251,6 +263,59 @@ const Members = () => {
                 ))
               )}
             </div>
+
+            {/* Pagination Controls */}
+            {filteredMembers.length > MEMBERS_PER_PAGE && (
+              <div className="mt-6 bg-white rounded-lg shadow-md border border-gray-200 p-4">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <p className="text-sm text-gray-600">
+                    Showing <span className="font-semibold">{startIndex + 1}</span> to <span className="font-semibold">{Math.min(startIndex + MEMBERS_PER_PAGE, filteredMembers.length)}</span> of <span className="font-semibold">{filteredMembers.length}</span> members
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      disabled={currentPage === 1}
+                      className="flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      <ChevronLeft className="h-4 w-4" /> Previous
+                    </button>
+                    {/* Page numbers */}
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: totalPages }, (_, i) => i + 1)
+                        .filter(page => {
+                          if (totalPages <= 7) return true;
+                          if (page === 1 || page === totalPages) return true;
+                          if (Math.abs(page - currentPage) <= 1) return true;
+                          return false;
+                        })
+                        .map((page, idx, arr) => (
+                          <React.Fragment key={page}>
+                            {idx > 0 && arr[idx - 1] !== page - 1 && (
+                              <span className="px-2 text-gray-400">...</span>
+                            )}
+                            <button
+                              onClick={() => setCurrentPage(page)}
+                              className={`min-w-[36px] h-9 text-sm font-medium rounded-lg transition-all ${currentPage === page
+                                  ? 'bg-indigo-600 text-white shadow-md'
+                                  : 'border border-gray-300 bg-white hover:bg-gray-50 text-gray-700'
+                                }`}
+                            >
+                              {page}
+                            </button>
+                          </React.Fragment>
+                        ))}
+                    </div>
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                      disabled={currentPage === totalPages}
+                      className="flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      Next <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
