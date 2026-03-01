@@ -23,7 +23,7 @@ import DailyCollection from './pages/DailyCollection';
 import DailySavings from './pages/DailySavings';
 import TotalDue from './pages/TotalDue';
 import MemberProfile from './pages/MemberProfile';
-
+import PendingInstallments from './pages/PendingInstallments';
 import ActivityLog from './pages/ActivityLog';
 import SMSManagement from './pages/SMSManagement';
 import AdminControlPanel from './pages/AdminControlPanel';
@@ -79,7 +79,7 @@ function AppContent() {
               <Route path="products" element={<Products />} />
               <Route path="sales-report" element={<SalesReport />} />
               <Route path="installments" element={<Installments />} />
-
+              <Route path="pending-installments" element={<PendingInstallments />} />
               <Route path="extra-installments" element={<ExtraInstallments />} />
               <Route path="savings" element={<Savings />} />
               <Route path="weekly" element={<Weekly />} />
