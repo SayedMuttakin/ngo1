@@ -29,24 +29,7 @@ const MembersList = ({ selectedBranch, selectedCollector, selectedDay, onGoBack 
     loadMembers();
     loadProducts();
 
-    // ✅ CRITICAL: Check if we need to auto-open a member from Pending Installments
-    const autoOpenMemberStr = localStorage.getItem('autoOpenMember');
-    if (autoOpenMemberStr) {
-      try {
-        const autoOpenMember = JSON.parse(autoOpenMemberStr);
-        console.log('🎯 Auto-opening member collection:', autoOpenMember.name);
 
-        // Set a delay to ensure members are loaded first
-        setTimeout(() => {
-          handleCollectInstallment(autoOpenMember);
-          // Clear the auto-open flag
-          localStorage.removeItem('autoOpenMember');
-        }, 1000);
-      } catch (error) {
-        console.log('Error parsing auto-open member:', error);
-        localStorage.removeItem('autoOpenMember');
-      }
-    }
 
     // Check for recent payments in localStorage
     const lastPayment = localStorage.getItem('lastPayment');

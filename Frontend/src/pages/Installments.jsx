@@ -35,16 +35,7 @@ const Installments = () => {
         if (branch) setSelectedBranch(branch);
         if (dashboard !== undefined) setShowDashboard(dashboard);
 
-        // ✅ CRITICAL: If directMember is set (coming from Pending Installments page)
-        // Skip dashboard and go straight to member collection
-        if (directMember && branch) {
-          console.log('🎯 Direct member navigation detected:', directMember.name);
-          // Set the branch which will trigger MembersList to show
-          setSelectedBranch(branch);
-          setShowDashboard(false);
-          // Store member for MembersList component to auto-open
-          localStorage.setItem('autoOpenMember', JSON.stringify(directMember));
-        }
+
       } catch (error) {
         localStorage.removeItem('installmentCollectionState');
         localStorage.removeItem('selectedCollector');
@@ -73,11 +64,7 @@ const Installments = () => {
           if (branch) setSelectedBranch(branch);
           if (dashboard !== undefined) setShowDashboard(dashboard);
 
-          if (directMember && branch) {
-            setSelectedBranch(branch);
-            setShowDashboard(false);
-            localStorage.setItem('autoOpenMember', JSON.stringify(directMember));
-          }
+
         } catch (error) {
           localStorage.removeItem('installmentCollectionState');
           localStorage.removeItem('selectedCollector');

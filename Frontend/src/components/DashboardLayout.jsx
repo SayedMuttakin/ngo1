@@ -37,7 +37,7 @@ const DashboardLayout = () => {
     { id: 'products', name: 'Product Management', icon: Package, path: '/products' },
     { id: 'sales-report', name: 'Sales Report', icon: BarChart3, path: '/sales-report' },
     { id: 'installments', name: 'Installment Collection', icon: DollarSign, path: '/installments?fresh=true' },
-    { id: 'pending-installments', name: 'Pending Installments', icon: Bell, path: '/pending-installments' },
+
     { id: 'daily-collection', name: 'Daily Total Collection', icon: TrendingUp, path: '/daily-collection' },
     { id: 'daily-savings', name: 'Daily Total Savings', icon: PiggyBank, path: '/daily-savings' },
     { id: 'total-due', name: 'Total Due Amount', icon: AlertCircle, path: '/total-due' },
@@ -230,7 +230,7 @@ const getPageTitle = (pathname) => {
     '/products': 'Product Management',
     '/sales-report': 'Sales Report',
     '/installments': 'Installment Collection',
-    '/pending-installments': 'Pending Installments',
+
     '/daily-collection': 'Daily Total Collection',
     '/daily-savings': 'Daily Total Savings',
     '/total-due': 'Total Due Amount',
