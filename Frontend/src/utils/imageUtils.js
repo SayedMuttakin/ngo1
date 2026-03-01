@@ -17,9 +17,8 @@ export const getImageUrl = (imagePath) => {
     const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
 
     if (isProduction) {
-        // Use API tunnel path to bypass cPanel/Apache permission issues with /uploads
-        const fullUrl = `/api${imagePath}`;
-        // console.log('🖼️ Generated Image URL (Prod):', fullUrl);
+        // Nginx serves uploads directly from /uploads/ path
+        const fullUrl = imagePath.startsWith('/uploads') ? imagePath : `/uploads${imagePath}`;
         return fullUrl;
     } else {
         // In development mode, prepend the API base URL

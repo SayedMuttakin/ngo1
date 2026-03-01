@@ -156,8 +156,13 @@ const PendingInstallments = () => {
 
     // Navigate to installment collection for a member
     const handleMemberClick = (member, collector) => {
-        // Save state for Installments page to auto-open this member
+        // Get current day of the week (Bangladesh timezone)
+        const bdNow = new Date(new Date().getTime() + (6 * 60 * 60 * 1000));
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const currentDay = dayNames[bdNow.getUTCDay()];
+
         const state = {
+            day: currentDay,
             collector: { _id: collector.id, name: collector.name },
             branch: { code: member.branchCode, name: member.branchName },
             dashboard: false,
