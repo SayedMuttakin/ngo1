@@ -1,5 +1,6 @@
 import React, { useState, memo } from 'react';
-import { User, Phone, Calendar, CreditCard, MapPin, UserCheck, History } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { User, Phone, Calendar, CreditCard, MapPin, UserCheck, History, X } from 'lucide-react';
 import { formatBDDateShort } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
 import { getImageUrl } from '../../utils/imageUtils';
@@ -7,6 +8,7 @@ import { getImageUrl } from '../../utils/imageUtils';
 const MemberCard = memo(({ member, onEdit, onDelete, onViewProfile }) => {
   const navigate = useNavigate();
   const [imgError, setImgError] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   const handleLoanHistory = () => {
     navigate(`/members/${member._id || member.id}`);
@@ -37,9 +39,11 @@ const MemberCard = memo(({ member, onEdit, onDelete, onViewProfile }) => {
                 alt={member.name}
                 loading="lazy"
                 decoding="async"
-                className="w-20 h-24 rounded-lg object-cover border-3 border-white shadow-lg"
+                className="w-20 h-24 rounded-lg object-cover border-3 border-white shadow-lg cursor-pointer hover:opacity-90 transition-opacity"
                 style={{ objectPosition: 'center top' }}
+                onClick={() => setLightboxOpen(true)}
                 onError={() => setImgError(true)}
+                title="Click to enlarge"
               />
             ) : (
               <div
@@ -116,6 +120,41 @@ const MemberCard = memo(({ member, onEdit, onDelete, onViewProfile }) => {
           </button>
         </div>
       </div>
+
+      {/* Lightbox Modal */}
+      {lightboxOpen && showImage && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setLightboxOpen(false)}
+        >
+          <div
+            className="relative max-w-sm w-full mx-4"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => setLightboxOpen(false)}
+              className="absolute -top-4 -right-4 z-10 bg-white rounded-full p-1.5 shadow-lg hover:bg-gray-100 transition-colors"
+            >
+              <X className="h-5 w-5 text-gray-700" />
+            </button>
+
+            {/* Member name header */}
+            <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white text-center py-2 px-4 rounded-t-xl text-sm font-semibold">
+              {member.name}
+            </div>
+
+            {/* Full size image */}
+            <img
+              src={imageUrl}
+              alt={member.name}
+              className="w-full rounded-b-xl object-contain bg-gray-50"
+              style={{ maxHeight: '70vh' }}
+            />
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 });
