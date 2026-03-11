@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('path');
 const Member = require('../models/Member');
 const { protect, authorize } = require('../middleware/auth');
-const { uploadProfileImage, handleUploadError } = require('../middleware/upload');
+const { uploadProfileImage, compressImage, handleUploadError } = require('../middleware/upload');
 
 const router = express.Router();
 
@@ -166,7 +166,7 @@ router.get('/:id', protect, async (req, res) => {
 // @desc    Create new member
 // @route   POST /api/members
 // @access  Private (Admin/Manager/Collector)
-router.post('/', protect, uploadProfileImage, handleUploadError, async (req, res) => {
+router.post('/', protect, uploadProfileImage, compressImage, handleUploadError, async (req, res) => {
   try {
     console.log('📥 Received member creation request');
     console.log('Request body:', req.body);
@@ -429,7 +429,7 @@ router.post('/', protect, uploadProfileImage, handleUploadError, async (req, res
 // @desc    Update member
 // @route   PUT /api/members/:id
 // @access  Private (Admin/Manager/Assigned Collector)
-router.put('/:id', protect, uploadProfileImage, handleUploadError, async (req, res) => {
+router.put('/:id', protect, uploadProfileImage, compressImage, handleUploadError, async (req, res) => {
   try {
     const member = await Member.findById(req.params.id);
 

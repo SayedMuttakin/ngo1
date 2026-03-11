@@ -8,23 +8,11 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Configure storage
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadsDir);
-  },
-  filename: function (req, file, cb) {
-    // Generate unique filename: memberCode_timestamp.extension
-    const memberCode = req.body.memberCode || 'member';
-    const timestamp = Date.now();
-    const extension = path.extname(file.originalname);
-    cb(null, `${memberCode}_${timestamp}${extension}`);
-  }
-});
+// Use memory storage so sharp can process before saving
+const storage = multer.memoryStorage();
 
 // File filter for images only
 const fileFilter = (req, file, cb) => {
-  // Check if file is an image
   if (file.mimetype.startsWith('image/')) {
     cb(null, true);
   } else {
@@ -32,17 +20,81 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// Configure multer
+// Configure multer with memory storage
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
+    fileSize: 10 * 1024 * 1024, // Allow up to 10MB input (will be compressed)
   },
   fileFilter: fileFilter
 });
 
 // Middleware for single profile image upload
 const uploadProfileImage = upload.single('profileImage');
+
+// Image compression middleware - runs AFTER multer
+const compressImage = async (req, res, next) => {
+  if (!req.file) return next();
+
+  try {
+    let sharp;
+    try {
+      sharp = require('sharp');
+    } catch (e) {
+      // If sharp not installed, save original file
+      console.warn('⚠️ sharp not installed - saving original image');
+      const memberCode = req.body.memberCode || 'member';
+      const timestamp = Date.now();
+      const ext = path.extname(req.file.originalname) || '.jpg';
+      const filename = `${memberCode}_${timestamp}${ext}`;
+      const filepath = path.join(uploadsDir, filename);
+      fs.writeFileSync(filepath, req.file.buffer);
+      req.file.filename = filename;
+      req.file.path = filepath;
+      return next();
+    }
+
+    const memberCode = req.body.memberCode || 'member';
+    const timestamp = Date.now();
+    const filename = `${memberCode}_${timestamp}.jpg`; // Always save as JPEG
+    const filepath = path.join(uploadsDir, filename);
+
+    // Compress: resize to max 500x600, convert to JPEG at 80% quality
+    await sharp(req.file.buffer)
+      .resize(500, 600, {
+        fit: 'inside',        // Keep aspect ratio
+        withoutEnlargement: true // Don't upscale small images
+      })
+      .jpeg({ quality: 80, progressive: true })
+      .toFile(filepath);
+
+    // Update req.file to match what the rest of the app expects
+    req.file.filename = filename;
+    req.file.path = filepath;
+    req.file.mimetype = 'image/jpeg';
+
+    const stats = fs.statSync(filepath);
+    console.log(`✅ Image compressed: ${req.file.originalname} → ${filename} (${(stats.size / 1024).toFixed(1)}KB)`);
+
+    next();
+  } catch (error) {
+    console.error('Image compression error:', error);
+    // If compression fails, try to save original
+    try {
+      const memberCode = req.body.memberCode || 'member';
+      const timestamp = Date.now();
+      const ext = path.extname(req.file.originalname) || '.jpg';
+      const filename = `${memberCode}_${timestamp}${ext}`;
+      const filepath = path.join(uploadsDir, filename);
+      fs.writeFileSync(filepath, req.file.buffer);
+      req.file.filename = filename;
+      req.file.path = filepath;
+      next();
+    } catch (saveError) {
+      next(saveError);
+    }
+  }
+};
 
 // Error handling middleware
 const handleUploadError = (error, req, res, next) => {
@@ -51,7 +103,7 @@ const handleUploadError = (error, req, res, next) => {
     if (error.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({
         success: false,
-        message: 'File too large. Maximum size is 5MB.'
+        message: 'File too large. Maximum size is 10MB.'
       });
     }
     if (error.code === 'LIMIT_UNEXPECTED_FILE') {
@@ -61,15 +113,14 @@ const handleUploadError = (error, req, res, next) => {
       });
     }
   }
-  
+
   if (error && error.message === 'Only image files are allowed!') {
     return res.status(400).json({
       success: false,
       message: 'Only image files (JPG, PNG, GIF, etc.) are allowed.'
     });
   }
-  
-  // If no specific error handling, continue
+
   if (error) {
     console.log('Upload error:', error);
   }
@@ -78,5 +129,6 @@ const handleUploadError = (error, req, res, next) => {
 
 module.exports = {
   uploadProfileImage,
+  compressImage,
   handleUploadError
 };
