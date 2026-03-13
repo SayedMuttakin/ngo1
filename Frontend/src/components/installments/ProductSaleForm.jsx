@@ -792,7 +792,8 @@ const ProductSaleForm = ({ selectedMember, selectedBranch, selectedCollector, se
               {/* Product Count Info */}
               {(() => {
                 const filteredProducts = availableProducts.filter(product => {
-                  const stock = product.availableStock || product.totalStock || product.stock || 0;
+                  const stock = product.availableStock !== undefined ? product.availableStock : 
+                               (product.totalStock !== undefined ? product.totalStock : (product.stock || 0));
                   return stock > 0 && product.name.toLowerCase().includes(productSearchTerm.toLowerCase());
                 });
                 return (
@@ -818,7 +819,8 @@ const ProductSaleForm = ({ selectedMember, selectedBranch, selectedCollector, se
                 <option value="" disabled>Choose from stock...</option>
                 {(() => {
                   const filteredProducts = availableProducts.filter(product => {
-                    const stock = product.availableStock || product.totalStock || product.stock || 0;
+                    const stock = product.availableStock !== undefined ? product.availableStock : 
+                                 (product.totalStock !== undefined ? product.totalStock : (product.stock || 0));
                     return stock > 0 && product.name.toLowerCase().includes(productSearchTerm.toLowerCase());
                   });
 
