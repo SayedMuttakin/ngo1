@@ -621,7 +621,8 @@ const MembersList = ({ selectedBranch, selectedCollector, selectedDay, onGoBack 
             </div>
           ))}
         </div>
-      )()}
+      );
+    })()}
 
       {/* New Separate Components */}
       {showAddForm && (
