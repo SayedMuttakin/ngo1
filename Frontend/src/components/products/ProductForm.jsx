@@ -30,8 +30,9 @@ const ProductForm = ({ product, onSave, onCancel }) => {
     if (!formData.unit) newErrors.unit = 'Unit is required';
     if (!formData.unitPrice || formData.unitPrice <= 0) newErrors.unitPrice = 'Valid unit price is required';
     // Only validate stock for new products
-    if (!product && (!formData.totalStock || formData.totalStock < 0)) newErrors.totalStock = 'Valid stock quantity is required';
-
+    if (formData.totalStock === '' || isNaN(formData.totalStock) || parseInt(formData.totalStock) < 0) {
+      newErrors.totalStock = 'Total stock must be a valid positive number';
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };

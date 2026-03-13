@@ -179,7 +179,7 @@ const validateProduct = (productData, isUpdate = false) => {
 
   // Total stock validation - Only for new products (not updates)
   if (!isUpdate) {
-    if (!productData.totalStock || isNaN(productData.totalStock) || parseInt(productData.totalStock) < 0) {
+    if (productData.totalStock === undefined || productData.totalStock === null || isNaN(productData.totalStock) || parseInt(productData.totalStock) < 0) {
       errors.totalStock = 'Total stock must be a valid positive number';
     }
   }
