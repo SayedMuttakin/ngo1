@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Users, Plus, DollarSign, Package, Edit, Trash2, UserPlus, Bell, Calendar, Clock, CheckCircle, AlertCircle, Minus } from 'lucide-react';
+import { ArrowLeft, Users, Plus, DollarSign, Package, Edit, Trash2, UserPlus, Bell, Calendar, Clock, CheckCircle, AlertCircle, Minus, Search } from 'lucide-react';
 import { membersAPI, installmentsAPI, productsAPI } from '../../utils/api';
 import AddMemberForm from './AddMemberForm';
 import ProductSaleForm from './ProductSaleForm';
@@ -23,6 +23,7 @@ const MembersList = ({ selectedBranch, selectedCollector, selectedDay, onGoBack 
   const [membersDueToday, setMembersDueToday] = useState(new Set());
   const [collectingInstallment, setCollectingInstallment] = useState(null);
   const [memberActiveSales, setMemberActiveSales] = useState({}); // Track active sales count per member
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Load members for this branch
   useEffect(() => {
@@ -419,35 +420,64 @@ const MembersList = ({ selectedBranch, selectedCollector, selectedDay, onGoBack 
         </div>
       </div>
 
+      {/* Search Bar */}
+      <div className="mb-6">
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="h-5 w-5 text-gray-400" />
+          </div>
+          <input
+            type="text"
+            className="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl leading-5 bg-white/80 backdrop-blur-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm transition-all shadow-sm"
+            placeholder="Search members by name, code or phone..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+      </div>
+
       {/* Members Grid */}
-      {members.length === 0 ? (
-        <div className="text-center py-16">
-          <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl p-16 max-w-lg mx-auto border border-white/20">
-            <div className="relative mb-8">
-              <div className="bg-gradient-to-r from-indigo-100 to-blue-100 rounded-full w-24 h-24 mx-auto flex items-center justify-center">
-                <Users className="h-12 w-12 text-indigo-600" />
-              </div>
-              <div className="absolute -top-2 -right-2 bg-gradient-to-r from-emerald-400 to-green-500 rounded-full w-8 h-8 flex items-center justify-center">
-                <Plus className="h-4 w-4 text-white" />
+      {(() => {
+        const filteredMembers = members.filter(member => {
+          const searchLower = searchTerm.toLowerCase();
+          return (
+            member.name?.toLowerCase().includes(searchLower) ||
+            member.memberCode?.toLowerCase().includes(searchLower) ||
+            member.phone?.includes(searchTerm) ||
+            (member.memberNumber && member.memberNumber.toString().includes(searchTerm))
+          );
+        });
+
+        if (filteredMembers.length === 0) {
+          return (
+            <div className="text-center py-16">
+              <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl p-16 max-w-lg mx-auto border border-white/20">
+                <div className="relative mb-8">
+                  <div className="bg-gradient-to-r from-indigo-100 to-blue-100 rounded-full w-24 h-24 mx-auto flex items-center justify-center">
+                    <Users className="h-12 w-12 text-indigo-600" />
+                  </div>
+                </div>
+                <h3 className="text-2xl font-bold text-gray-800 mb-3">No Members Found</h3>
+                <p className="text-gray-600 mb-8 leading-relaxed">
+                  {searchTerm ? `No members match "${searchTerm}" in this branch.` : "No members are registered for this branch yet."}
+                </p>
+                {!searchTerm && (
+                  <button
+                    onClick={() => setShowAddForm(true)}
+                    className="bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white px-10 py-4 rounded-2xl font-bold transition-all duration-300 flex items-center space-x-3 mx-auto shadow-xl hover:shadow-2xl transform hover:-translate-y-1"
+                  >
+                    <Plus className="h-6 w-6" />
+                    <span>Add Your First Member</span>
+                  </button>
+                )}
               </div>
             </div>
-            <h3 className="text-2xl font-bold text-gray-800 mb-3">No Members Found</h3>
-            <p className="text-gray-600 mb-8 leading-relaxed">
-              No members are registered for this branch yet.<br />
-              <span className="text-indigo-600 font-medium">Start by adding your first member!</span>
-            </p>
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white px-10 py-4 rounded-2xl font-bold transition-all duration-300 flex items-center space-x-3 mx-auto shadow-xl hover:shadow-2xl transform hover:-translate-y-1"
-            >
-              <Plus className="h-6 w-6" />
-              <span>Add Your First Member</span>
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {members.map((member, index) => (
+          );
+        }
+
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {filteredMembers.map((member, index) => (
             <div
               key={member._id}
               className={`group relative bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 p-4 md:p-6 border border-white/20 hover:border-indigo-200 transform hover:-translate-y-2 h-full flex flex-col ${membersDueToday.has(member._id)
@@ -591,7 +621,7 @@ const MembersList = ({ selectedBranch, selectedCollector, selectedDay, onGoBack 
             </div>
           ))}
         </div>
-      )}
+      )()}
 
       {/* New Separate Components */}
       {showAddForm && (
