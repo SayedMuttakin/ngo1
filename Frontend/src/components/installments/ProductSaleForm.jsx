@@ -791,9 +791,10 @@ const ProductSaleForm = ({ selectedMember, selectedBranch, selectedCollector, se
 
               {/* Product Count Info */}
               {(() => {
-                const filteredProducts = availableProducts.filter(product =>
-                  product.name.toLowerCase().includes(productSearchTerm.toLowerCase())
-                );
+                const filteredProducts = availableProducts.filter(product => {
+                  const stock = product.availableStock || product.totalStock || product.stock || 0;
+                  return stock > 0 && product.name.toLowerCase().includes(productSearchTerm.toLowerCase());
+                });
                 return (
                   <p className="text-xs text-gray-500">
                     Showing {filteredProducts.length} of {availableProducts.length} products
@@ -816,9 +817,10 @@ const ProductSaleForm = ({ selectedMember, selectedBranch, selectedCollector, se
               >
                 <option value="" disabled>Choose from stock...</option>
                 {(() => {
-                  const filteredProducts = availableProducts.filter(product =>
-                    product.name.toLowerCase().includes(productSearchTerm.toLowerCase())
-                  );
+                  const filteredProducts = availableProducts.filter(product => {
+                    const stock = product.availableStock || product.totalStock || product.stock || 0;
+                    return stock > 0 && product.name.toLowerCase().includes(productSearchTerm.toLowerCase());
+                  });
 
                   if (filteredProducts.length === 0) {
                     return <option value="" disabled>No products found</option>;
