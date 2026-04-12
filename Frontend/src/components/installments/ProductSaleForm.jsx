@@ -796,10 +796,19 @@ const ProductSaleForm = ({ selectedMember, selectedBranch, selectedCollector, se
                                (product.totalStock !== undefined ? product.totalStock : (product.stock || 0));
                   return stock > 0 && product.name.toLowerCase().includes(productSearchTerm.toLowerCase());
                 });
+                const inStockCount = availableProducts.filter(product => {
+                  const stock = product.availableStock !== undefined ? product.availableStock : 
+                               (product.totalStock !== undefined ? product.totalStock : (product.stock || 0));
+                  return stock > 0;
+                }).length;
                 return (
                   <p className="text-xs text-gray-500">
-                    Showing {filteredProducts.length} of {availableProducts.length} products
+                    {productSearchTerm 
+                      ? `🔍 Found ${filteredProducts.length} of ${inStockCount} in-stock products`
+                      : `📦 ${inStockCount} products in stock (${availableProducts.length - inStockCount} out of stock hidden)`
+                    }
                   </p>
+
                 );
               })()}
 

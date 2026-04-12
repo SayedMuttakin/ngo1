@@ -24,6 +24,7 @@ const MembersList = ({ selectedBranch, selectedCollector, selectedDay, onGoBack 
   const [collectingInstallment, setCollectingInstallment] = useState(null);
   const [memberActiveSales, setMemberActiveSales] = useState({}); // Track active sales count per member
   const [searchTerm, setSearchTerm] = useState('');
+  
 
   // Load members for this branch
   useEffect(() => {
@@ -149,9 +150,12 @@ const MembersList = ({ selectedBranch, selectedCollector, selectedDay, onGoBack 
 
   const loadProducts = async () => {
     try {
-      const response = await productsAPI.getAll();
+      // Load ALL products (no pagination limit) so Product Sale dropdown shows everything
+      const response = await productsAPI.getAll({ limit: 99999, page: 1 });
       if (response.success) {
-        setAvailableProducts(response.data || []);
+        const allProducts = response.data || [];
+        console.log(`📦 Loaded ${allProducts.length} total products for sale dropdown`);
+        setAvailableProducts(allProducts);
       }
     } catch (error) {
       console.error('Error loading products:', error);
