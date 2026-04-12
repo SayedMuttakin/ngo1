@@ -35,8 +35,12 @@ const ProductCard = ({ product, onEdit, onDelete, onUpdateStock }) => {
     return colors[category] || 'bg-gray-100 text-gray-700';
   };
 
-  const stock = product.availableStock || product.totalStock || product.stock || 0;
-  const sold = product.distributedStock || 0;
+  const stock = product.availableStock !== undefined && product.availableStock !== null 
+    ? product.availableStock 
+    : (product.totalStock !== undefined && product.totalStock !== null ? product.totalStock : (product.stock || 0));
+  const sold = product.distributedStock !== undefined && product.distributedStock !== null 
+    ? product.distributedStock 
+    : 0;
   const totalValue = stock * (product.unitPrice || product.price || 0);
 
   return (
