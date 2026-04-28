@@ -2646,8 +2646,21 @@ const CollectionSheet = ({ selectedCollector, selectedBranch, selectedDay, onGoB
                       // ✅ INCREMENT member count
                       memberCount++;
 
-                      // ✅ PAGE BREAK: Insert page break after every 11 members (but not after last member)
-                      if (memberCount % 11 === 0 && memberIndex < sortedMembers.length - 1) {
+                      // ✅ PAGE BREAK LOGIC:
+                      // - 1st page: header is large, so only 9 members fit → break after 9
+                      // - Subsequent pages: header repeats smaller, 11 members fit → break every 11
+                      // Formula: break at 9, then at 9+11=20, 9+22=31, etc.
+                      const FIRST_PAGE_MEMBERS = 9;
+                      const SUBSEQUENT_PAGE_MEMBERS = 11;
+                      
+                      let shouldBreak = false;
+                      if (memberCount === FIRST_PAGE_MEMBERS) {
+                        shouldBreak = true; // after 9th member
+                      } else if (memberCount > FIRST_PAGE_MEMBERS && (memberCount - FIRST_PAGE_MEMBERS) % SUBSEQUENT_PAGE_MEMBERS === 0) {
+                        shouldBreak = true; // after 20th, 31st, 42nd... member
+                      }
+
+                      if (shouldBreak && memberIndex < sortedMembers.length - 1) {
                         allRows.push(
                           <tr key={`page-break-${memberCount}`} className="page-break-row">
                             <td colSpan={12 + installmentDates.length} className="border-0 p-0" style={{ border: 'none' }}>
