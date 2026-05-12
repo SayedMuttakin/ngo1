@@ -60,10 +60,10 @@ const DashboardLayout = () => {
   const Sidebar = ({ mobile = false }) => (
     <div className={`no-print ${mobile ? 'fixed inset-0 z-[60] lg:hidden' : 'hidden lg:flex lg:w-64 lg:flex-col'}`}>
       {mobile && (
-        <div className="fixed inset-0 bg-transparent" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-0 bg-black/40" onClick={() => setSidebarOpen(false)} />
       )}
 
-      <div className={`${mobile ? 'relative flex w-full max-w-xs flex-1 flex-col shadow-2xl' : 'flex flex-1 flex-col min-h-0'} bg-gradient-to-br from-indigo-950 via-purple-900 to-indigo-950 backdrop-blur-xl`}>
+      <div className={`${mobile ? 'relative flex w-full max-w-xs flex-col h-full shadow-2xl' : 'flex flex-1 flex-col min-h-0'} bg-gradient-to-br from-indigo-950 via-purple-900 to-indigo-950 backdrop-blur-xl`}>
         {mobile && (
           <div className="absolute top-0 right-0 -mr-12 pt-2">
             <button
@@ -76,43 +76,43 @@ const DashboardLayout = () => {
           </div>
         )}
 
-        {/* Logo */}
-        <div className="flex flex-1 flex-col pt-5 pb-4 overflow-y-auto scrollbar-hide">
-          <div className="flex items-center flex-shrink-0 px-4 mb-2">
-            <div className="flex items-center space-x-3 w-full bg-indigo-900/40 rounded-xl p-3 border border-purple-700/50">
-              <img src={logo} alt="Satrong Sajghor Traders" className="h-12 w-12 rounded-lg border-2 border-purple-500 bg-white object-contain p-1 shadow-lg shadow-purple-500/30" />
-              <div>
-                <h1 className="text-base font-bold text-white tracking-tight">Satrong Sajghor Traders</h1>
-                <p className="text-xs text-purple-300 font-medium">Business Management System</p>
-              </div>
+        {/* Logo — fixed at top */}
+        <div className="flex-shrink-0 pt-5 pb-3 px-4">
+          <div className="flex items-center space-x-3 w-full bg-indigo-900/40 rounded-xl p-3 border border-purple-700/50">
+            <img src={logo} alt="Satrong Sajghor Traders" className="h-12 w-12 rounded-lg border-2 border-purple-500 bg-white object-contain p-1 shadow-lg shadow-purple-500/30" />
+            <div>
+              <h1 className="text-base font-bold text-white tracking-tight">Satrong Sajghor Traders</h1>
+              <p className="text-xs text-purple-300 font-medium">Business Management System</p>
             </div>
           </div>
-
-          {/* Navigation */}
-          <nav className="mt-6 flex-1 px-3 space-y-1.5">
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.path;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    navigate(item.path);
-                    if (mobile) setSidebarOpen(false);
-                  }}
-                  className={`w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-300 ease-out ${isActive
-                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/30 scale-[1.02] border border-purple-400/50'
-                    : 'text-purple-200 hover:bg-indigo-900/60 hover:text-white hover:scale-[1.02] hover:shadow-md hover:border hover:border-purple-700/50 border border-transparent'
-                    }`}
-                >
-                  <Icon className={`mr-3 flex-shrink-0 h-5 w-5 transition-all duration-300 ${isActive ? 'text-white scale-110' : 'text-purple-400 group-hover:text-purple-300 group-hover:scale-110'
-                    }`} />
-                  <span className="transition-all duration-300 font-medium">{item.name}</span>
-                </button>
-              );
-            })}
-          </nav>
         </div>
+
+        {/* Navigation — scrollable area */}
+        <nav className="flex-1 overflow-y-auto overscroll-contain px-3 pt-3 pb-4 space-y-1.5"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
+          {menuItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = location.pathname === item.path;
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  navigate(item.path);
+                  if (mobile) setSidebarOpen(false);
+                }}
+                className={`w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-300 ease-out ${isActive
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/30 scale-[1.02] border border-purple-400/50'
+                  : 'text-purple-200 hover:bg-indigo-900/60 hover:text-white hover:scale-[1.02] hover:shadow-md hover:border hover:border-purple-700/50 border border-transparent'
+                  }`}
+              >
+                <Icon className={`mr-3 flex-shrink-0 h-5 w-5 transition-all duration-300 ${isActive ? 'text-white scale-110' : 'text-purple-400 group-hover:text-purple-300 group-hover:scale-110'
+                  }`} />
+                <span className="transition-all duration-300 font-medium">{item.name}</span>
+              </button>
+            );
+          })}
+        </nav>
 
         {/* User Info */}
         <div className="flex-shrink-0 flex border-t border-purple-700/50 p-4 bg-indigo-900/30">
