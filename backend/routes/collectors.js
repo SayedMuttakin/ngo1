@@ -780,7 +780,7 @@ router.get('/:id/savings-overview', protect, async (req, res) => {
 // @access  Private
 router.get('/:id/daily-report', protect, async (req, res) => {
   try {
-    const Installment = require('../models/Installment');
+    const CollectionHistory = require('../models/CollectionHistory');
     const Branch = require('../models/Branch');
 
     const { date } = req.query;
@@ -793,61 +793,66 @@ router.get('/:id/daily-report', protect, async (req, res) => {
     // Build date range for the target day (Bangladesh = UTC+6)
     let targetDateStr;
     if (date) {
-      targetDateStr = date; // YYYY-MM-DD
+      targetDateStr = date;
     } else {
       const now = new Date();
       const bdNow = new Date(now.getTime() + 6 * 60 * 60 * 1000);
       targetDateStr = bdNow.toISOString().split('T')[0];
     }
 
-    // Parse the date and create UTC start/end covering full BD day
     const [year, month, day] = targetDateStr.split('-').map(Number);
-    // BD midnight = UTC 18:00 previous day, BD 23:59 = UTC 17:59 same day
     const startUTC = new Date(Date.UTC(year, month - 1, day, 0, 0, 0) - 6 * 60 * 60 * 1000);
-    const endUTC = new Date(Date.UTC(year, month - 1, day, 23, 59, 59) - 6 * 60 * 60 * 1000);
+    const endUTC   = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999) - 6 * 60 * 60 * 1000);
 
-    // Get installments collected today by this collector
-    const todayInstallments = await Installment.find({
+    // Use CollectionHistory for exact per-transaction collected amounts
+    const todayHistory = await CollectionHistory.find({
       collector: collector._id,
-      status: { $in: ['collected', 'partial'] },
       collectionDate: { $gte: startUTC, $lte: endUTC },
       isActive: true
-    }).populate('member', 'name memberCode phone branchCode');
+    })
+      .populate('member', 'name memberCode phone branchCode')
+      .populate('installment', 'installmentType note');
 
     // Group by member
     const memberMap = new Map();
 
-    todayInstallments.forEach(inst => {
-      const memberId = inst.member?._id?.toString();
+    todayHistory.forEach(hist => {
+      const memberId = hist.member?._id?.toString();
       if (!memberId) return;
+
+      // Skip savings-withdrawal (savings going OUT is not a collection-in)
+      if (hist.paymentMethod === 'savings_withdrawal') return;
 
       if (!memberMap.has(memberId)) {
         memberMap.set(memberId, {
           memberId,
-          memberName: inst.member.name || 'Unknown',
-          memberCode: inst.member.memberCode || '',
-          phone: inst.member.phone || '',
-          branchCode: inst.member.branchCode || '',
+          memberName: hist.member.name || 'Unknown',
+          memberCode: hist.member.memberCode || '',
+          phone: hist.member.phone || '',
+          branchCode: hist.member.branchCode || hist.branchCode || '',
           loanAmount: 0,
           savingsAmount: 0
         });
       }
 
-      const entry = memberMap.get(memberId);
-      const note = inst.note || '';
-      const amount = inst.paidAmount || inst.amount || 0;
+      const entry  = memberMap.get(memberId);
+      const amount = hist.collectionAmount || 0;
+      const note   = hist.installment?.note || hist.note || '';
 
-      const isSavingsCollection = (inst.installmentType === 'extra' || inst.installmentType === 'savings') &&
-        (note.includes('Savings Collection') || note.includes('Initial Savings'));
+      const isSavings = (
+        hist.installment?.installmentType === 'savings' ||
+        note.includes('Savings Collection') ||
+        note.includes('Initial Savings')
+      );
 
-      if (isSavingsCollection) {
+      if (isSavings) {
         entry.savingsAmount += amount;
       } else {
         entry.loanAmount += amount;
       }
     });
 
-    // Get branch names
+    // Resolve branch names from Branch collection
     const branchCodes = [...new Set([...memberMap.values()].map(m => m.branchCode).filter(Boolean))];
     const branches = await Branch.find({ branchCode: { $in: branchCodes } }).select('branchCode name');
     const branchNameMap = {};
@@ -860,7 +865,7 @@ router.get('/:id/daily-report', protect, async (req, res) => {
       totalCollected: entry.loanAmount + entry.savingsAmount
     }));
 
-    // Sort by branch then member name
+    // Sort: branch code asc, then member name asc
     reportRows.sort((a, b) => {
       if (a.branchCode < b.branchCode) return -1;
       if (a.branchCode > b.branchCode) return 1;
@@ -868,8 +873,8 @@ router.get('/:id/daily-report', protect, async (req, res) => {
     });
     reportRows.forEach((r, i) => { r.serial = i + 1; });
 
-    const totalLoan = reportRows.reduce((s, r) => s + r.loanAmount, 0);
-    const totalSavings = reportRows.reduce((s, r) => s + r.savingsAmount, 0);
+    const totalLoan       = reportRows.reduce((s, r) => s + r.loanAmount, 0);
+    const totalSavings    = reportRows.reduce((s, r) => s + r.savingsAmount, 0);
     const totalCollection = reportRows.reduce((s, r) => s + r.totalCollected, 0);
 
     res.status(200).json({
