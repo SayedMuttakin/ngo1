@@ -432,7 +432,10 @@ export const productsAPI = {
   getSalesReport: (params = {}) => {
     const queryString = new URLSearchParams(params).toString();
     return apiRequest(`/products/sales/report${queryString ? `?${queryString}` : ''}`);
-  }
+  },
+
+  // Get today's product activity report
+  getTodayReport: () => apiRequest('/products/today/report')
 };
 
 // Distributions API functions

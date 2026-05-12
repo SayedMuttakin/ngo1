@@ -81,9 +81,12 @@ const Members = () => {
 
   // Filter members based on search and status
   const filteredMembers = members.filter(member => {
-    const matchesSearch = member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.phone.includes(searchTerm) ||
-      member.branch.toLowerCase().includes(searchTerm.toLowerCase());
+    const search = searchTerm.toLowerCase();
+    const matchesSearch = !searchTerm ||
+      (member.name && member.name.toLowerCase().includes(search)) ||
+      (member.phone && member.phone.includes(searchTerm)) ||
+      (member.branch && member.branch.toLowerCase().includes(search)) ||
+      (member.memberCode && member.memberCode.toLowerCase().includes(search));
 
     const matchesStatus = filterStatus === 'all' || member.status.toLowerCase() === filterStatus.toLowerCase();
 
@@ -175,7 +178,7 @@ const Members = () => {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
                 <input
                   type="text"
-                  placeholder="Search members by name, phone, or branch..."
+                  placeholder="Search by name, phone, branch, or member code..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-all"

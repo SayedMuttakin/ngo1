@@ -591,4 +591,157 @@ router.get('/sales/report', protect, async (req, res) => {
   }
 });
 
+// @desc    Get today's product activity report
+// @route   GET /api/products/today/report
+// @access  Private
+router.get('/today/report', protect, async (req, res) => {
+  try {
+    const now = new Date();
+    // Bangladesh timezone offset = UTC+6
+    const bdOffset = 6 * 60 * 60 * 1000;
+    // Get today's date in BD timezone
+    const bdNow = new Date(now.getTime() + bdOffset);
+    const bdYear = bdNow.getUTCFullYear();
+    const bdMonth = bdNow.getUTCMonth();
+    const bdDay = bdNow.getUTCDate();
+
+    // Today's start in UTC = BD midnight = UTC prev day 18:00
+    const todayStart = new Date(Date.UTC(bdYear, bdMonth, bdDay - 1, 18, 0, 0, 0));
+    // Today's end in UTC = BD midnight next day - 1ms = UTC today 17:59:59
+    const todayEnd = new Date(Date.UTC(bdYear, bdMonth, bdDay, 17, 59, 59, 999));
+
+    console.log('📅 Today Report - BD Date:', `${bdYear}-${bdMonth + 1}-${bdDay}`);
+    console.log('   UTC Range:', todayStart.toISOString(), 'to', todayEnd.toISOString());
+
+    // 1. Products added today
+    const productsAddedToday = await Product.find({
+      isActive: true,
+      createdAt: { $gte: todayStart, $lte: todayEnd }
+    }).populate('createdBy', 'name').sort({ createdAt: -1 });
+
+    // 2. Products updated (stock added) today
+    const productsUpdatedToday = await Product.find({
+      isActive: true,
+      updatedAt: { $gte: todayStart, $lte: todayEnd },
+      createdAt: { $lt: todayStart } // Only updates, not new ones
+    }).populate('updatedBy', 'name').sort({ updatedAt: -1 });
+
+    // 3. Today's product sales from Installments
+    const Installment = require('../models/Installment');
+    const todaySales = await Installment.find({
+      collectionDate: { $gte: todayStart, $lte: todayEnd },
+      installmentType: 'extra',
+      note: { $regex: 'Product Sale:', $options: 'i' },
+      status: 'collected',
+      isActive: true
+    }).populate('member', 'name memberCode').populate('collector', 'name').sort({ collectionDate: -1 });
+
+    // Parse sales details
+    let totalSalesValue = 0;
+    let totalQtySold = 0;
+    const salesDetails = [];
+
+    for (const sale of todaySales) {
+      try {
+        let noteMatch = sale.note.match(/Product Sale: (.+?) \(Qty: ([\d.]+)\s*(\w+),\s*৳([\d,]+)\)/);
+        let productName, quantity, unit, subtotal;
+
+        if (noteMatch) {
+          productName = noteMatch[1].trim();
+          quantity = parseFloat(noteMatch[2]);
+          unit = noteMatch[3];
+          subtotal = parseFloat(noteMatch[4].replace(/,/g, ''));
+        } else {
+          noteMatch = sale.note.match(/Product Sale: (.+?) \(Qty: ([\d.]+),\s*৳([\d,]+)\)/);
+          if (noteMatch) {
+            productName = noteMatch[1].trim();
+            quantity = parseFloat(noteMatch[2]);
+            unit = 'piece';
+            subtotal = parseFloat(noteMatch[3].replace(/,/g, ''));
+          }
+        }
+
+        if (noteMatch && productName) {
+          totalSalesValue += subtotal;
+          totalQtySold += quantity;
+          salesDetails.push({
+            productName,
+            quantity,
+            unit,
+            subtotal,
+            memberName: sale.member?.name || 'Unknown',
+            memberCode: sale.member?.memberCode || '',
+            collectorName: sale.collector?.name || 'Unknown',
+            collectionDate: sale.collectionDate,
+            note: sale.note
+          });
+        }
+      } catch (err) {
+        console.error('Error parsing sale note:', err.message);
+      }
+    }
+
+    // Aggregate sales by product name
+    const salesByProduct = {};
+    for (const s of salesDetails) {
+      if (!salesByProduct[s.productName]) {
+        salesByProduct[s.productName] = { productName: s.productName, unit: s.unit, totalQty: 0, totalValue: 0, transactions: 0 };
+      }
+      salesByProduct[s.productName].totalQty += s.quantity;
+      salesByProduct[s.productName].totalValue += s.subtotal;
+      salesByProduct[s.productName].transactions += 1;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        date: `${bdYear}-${String(bdMonth + 1).padStart(2, '0')}-${String(bdDay).padStart(2, '0')}`,
+        productsAdded: productsAddedToday.map(p => ({
+          _id: p._id,
+          name: p.name,
+          category: p.category,
+          unitPrice: p.unitPrice,
+          totalStock: p.totalStock,
+          availableStock: p.availableStock,
+          unit: p.unit,
+          createdBy: p.createdBy?.name || 'Unknown',
+          createdAt: p.createdAt,
+          stockValue: p.availableStock * p.unitPrice
+        })),
+        productsRestocked: productsUpdatedToday.map(p => ({
+          _id: p._id,
+          name: p.name,
+          category: p.category,
+          unitPrice: p.unitPrice,
+          availableStock: p.availableStock,
+          unit: p.unit,
+          updatedBy: p.updatedBy?.name || 'Unknown',
+          updatedAt: p.updatedAt
+        })),
+        sales: {
+          totalTransactions: todaySales.length,
+          totalSalesValue,
+          totalQtySold,
+          byProduct: Object.values(salesByProduct).sort((a, b) => b.totalValue - a.totalValue),
+          details: salesDetails
+        },
+        summary: {
+          newProductsCount: productsAddedToday.length,
+          restockedCount: productsUpdatedToday.length,
+          totalSalesValue,
+          totalNewStockValue: productsAddedToday.reduce((sum, p) => sum + (p.availableStock * p.unitPrice), 0)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching today report:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching today report',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;
+
