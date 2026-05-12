@@ -15,9 +15,9 @@ const TodayReportModal = ({ onClose }) => {
       try {
         const res = await productsAPI.getTodayReport();
         if (res.success) setReport(res.data);
-        else toast.error('রিপোর্ট লোড করতে সমস্যা হয়েছে');
+        else toast.error('Failed to load report');
       } catch {
-        toast.error('সার্ভার সংযোগে সমস্যা');
+        toast.error('Server connection error');
       } finally {
         setLoading(false);
       }
@@ -35,7 +35,7 @@ const TodayReportModal = ({ onClose }) => {
           <div className="flex items-center gap-3">
             <div className="bg-white/20 rounded-xl p-2"><BarChart2 className="h-6 w-6" /></div>
             <div>
-              <h2 className="text-xl font-bold">আজকের রিপোর্ট</h2>
+              <h2 className="text-xl font-bold">Today's Report</h2>
               <p className="text-sm text-white/80">{report?.date || '...'}</p>
             </div>
           </div>
@@ -46,19 +46,19 @@ const TodayReportModal = ({ onClose }) => {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-16 gap-4">
               <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
-              <p className="text-gray-500">লোড হচ্ছে...</p>
+              <p className="text-gray-500">Loading...</p>
             </div>
           ) : !report ? (
-            <p className="text-center text-gray-400 py-12">কোনো তথ্য পাওয়া যায়নি</p>
+            <p className="text-center text-gray-400 py-12">No data found</p>
           ) : (
             <>
               {/* Summary Cards */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {[
-                  { label: 'নতুন পণ্য', value: report.summary.newProductsCount, icon: <PackagePlus className="h-5 w-5" />, color: 'from-blue-500 to-blue-600' },
-                  { label: 'রিস্টক', value: report.summary.restockedCount, icon: <RotateCcw className="h-5 w-5" />, color: 'from-violet-500 to-violet-600' },
-                  { label: 'মোট বিক্রি', value: `৳${fmt(report.summary.totalSalesValue)}`, icon: <TrendingUp className="h-5 w-5" />, color: 'from-green-500 to-emerald-600' },
-                  { label: 'নতুন স্টক মূল্য', value: `৳${fmt(report.summary.totalNewStockValue)}`, icon: <ShoppingBag className="h-5 w-5" />, color: 'from-orange-500 to-red-500' },
+                  { label: 'New Products', value: report.summary.newProductsCount, icon: <PackagePlus className="h-5 w-5" />, color: 'from-blue-500 to-blue-600' },
+                  { label: 'Restocked', value: report.summary.restockedCount, icon: <RotateCcw className="h-5 w-5" />, color: 'from-violet-500 to-violet-600' },
+                  { label: 'Total Sales', value: `৳${fmt(report.summary.totalSalesValue)}`, icon: <TrendingUp className="h-5 w-5" />, color: 'from-green-500 to-emerald-600' },
+                  { label: 'New Stock Value', value: `৳${fmt(report.summary.totalNewStockValue)}`, icon: <ShoppingBag className="h-5 w-5" />, color: 'from-orange-500 to-red-500' },
                 ].map((s, i) => (
                   <div key={i} className={`bg-gradient-to-br ${s.color} text-white rounded-2xl p-4 shadow-md`}>
                     <div className="flex items-center gap-2 mb-2 opacity-80">{s.icon}<span className="text-xs font-medium">{s.label}</span></div>
@@ -70,22 +70,22 @@ const TodayReportModal = ({ onClose }) => {
               {/* Products Added Today */}
               <section>
                 <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2 text-base">
-                  <PackagePlus className="h-5 w-5 text-blue-500" /> আজ নতুন যোগ করা পণ্য ({report.productsAdded.length})
+                  <PackagePlus className="h-5 w-5 text-blue-500" /> Products Added Today ({report.productsAdded.length})
                 </h3>
                 {report.productsAdded.length === 0 ? (
-                  <p className="text-sm text-gray-400 bg-gray-50 rounded-xl p-4 text-center">আজ কোনো নতুন পণ্য যোগ হয়নি</p>
+                  <p className="text-sm text-gray-400 bg-gray-50 rounded-xl p-4 text-center">No new products added today</p>
                 ) : (
                   <div className="space-y-2">
                     {report.productsAdded.map((p, i) => (
                       <div key={i} className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
                         <div>
                           <p className="font-semibold text-gray-800 text-sm">{p.name}</p>
-                          <p className="text-xs text-gray-500">{p.category} • যোগ করেছেন: {p.createdBy}</p>
+                          <p className="text-xs text-gray-500">{p.category} • Added by: {p.createdBy}</p>
                         </div>
                         <div className="text-right">
                           <p className="text-sm font-bold text-blue-700">৳{fmt(p.unitPrice)}<span className="text-xs font-normal text-gray-400">/{p.unit}</span></p>
-                          <p className="text-xs text-gray-500">স্টক: {p.availableStock} {p.unit}</p>
-                          <p className="text-xs font-semibold text-green-600">মূল্য: ৳{fmt(p.stockValue)}</p>
+                          <p className="text-xs text-gray-500">Stock: {p.availableStock} {p.unit}</p>
+                          <p className="text-xs font-semibold text-green-600">Value: ৳{fmt(p.stockValue)}</p>
                         </div>
                       </div>
                     ))}
@@ -97,18 +97,18 @@ const TodayReportModal = ({ onClose }) => {
               {report.productsRestocked.length > 0 && (
                 <section>
                   <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2 text-base">
-                    <RotateCcw className="h-5 w-5 text-violet-500" /> আজ স্টক আপডেট হয়েছে ({report.productsRestocked.length})
+                    <RotateCcw className="h-5 w-5 text-violet-500" /> Stock Updated Today ({report.productsRestocked.length})
                   </h3>
                   <div className="space-y-2">
                     {report.productsRestocked.map((p, i) => (
                       <div key={i} className="flex items-center justify-between bg-violet-50 border border-violet-100 rounded-xl px-4 py-3">
                         <div>
                           <p className="font-semibold text-gray-800 text-sm">{p.name}</p>
-                          <p className="text-xs text-gray-500">{p.category} • আপডেট: {p.updatedBy}</p>
+                          <p className="text-xs text-gray-500">{p.category} • Updated by: {p.updatedBy}</p>
                         </div>
                         <div className="text-right">
                           <p className="text-sm font-bold text-violet-700">৳{fmt(p.unitPrice)}/{p.unit}</p>
-                          <p className="text-xs text-gray-500">বর্তমান: {p.availableStock} {p.unit}</p>
+                          <p className="text-xs text-gray-500">Current: {p.availableStock} {p.unit}</p>
                         </div>
                       </div>
                     ))}
@@ -119,10 +119,10 @@ const TodayReportModal = ({ onClose }) => {
               {/* Today's Sales */}
               <section>
                 <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2 text-base">
-                  <TrendingUp className="h-5 w-5 text-green-500" /> আজকের বিক্রয় ({report.sales.totalTransactions} টি লেনদেন)
+                  <TrendingUp className="h-5 w-5 text-green-500" /> Today's Sales ({report.sales.totalTransactions} transactions)
                 </h3>
                 {report.sales.totalTransactions === 0 ? (
-                  <p className="text-sm text-gray-400 bg-gray-50 rounded-xl p-4 text-center">আজ কোনো বিক্রয় হয়নি</p>
+                  <p className="text-sm text-gray-400 bg-gray-50 rounded-xl p-4 text-center">No sales today</p>
                 ) : (
                   <>
                     {/* By Product Summary */}
@@ -131,7 +131,7 @@ const TodayReportModal = ({ onClose }) => {
                         <div key={i} className="flex items-center justify-between bg-green-50 border border-green-100 rounded-xl px-4 py-3">
                           <div>
                             <p className="font-semibold text-gray-800 text-sm">{p.productName}</p>
-                            <p className="text-xs text-gray-500">{p.transactions} টি লেনদেন • {p.totalQty} {p.unit}</p>
+                            <p className="text-xs text-gray-500">{p.transactions} transactions • {p.totalQty} {p.unit}</p>
                           </div>
                           <p className="text-base font-bold text-green-700">৳{fmt(p.totalValue)}</p>
                         </div>
@@ -141,8 +141,8 @@ const TodayReportModal = ({ onClose }) => {
                     {/* Total */}
                     <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-2xl px-5 py-4 flex items-center justify-between shadow-lg">
                       <div>
-                        <p className="text-green-100 text-sm">মোট বিক্রয় আয় (আজ)</p>
-                        <p className="text-xs text-green-200">{report.sales.totalQtySold} টি পণ্য বিক্রি</p>
+                        <p className="text-green-100 text-sm">Total Sales Revenue (Today)</p>
+                        <p className="text-xs text-green-200">{report.sales.totalQtySold} products sold</p>
                       </div>
                       <p className="text-2xl font-bold">৳{fmt(report.sales.totalSalesValue)}</p>
                     </div>
@@ -150,13 +150,13 @@ const TodayReportModal = ({ onClose }) => {
                     {/* Transaction Details */}
                     {report.sales.details.length > 0 && (
                       <details className="mt-3">
-                        <summary className="cursor-pointer text-sm text-indigo-600 font-semibold hover:text-indigo-800 select-none">বিস্তারিত লেনদেন দেখুন ▼</summary>
+                        <summary className="cursor-pointer text-sm text-indigo-600 font-semibold hover:text-indigo-800 select-none">View detailed transactions ▼</summary>
                         <div className="mt-2 space-y-2 max-h-48 overflow-y-auto">
                           {report.sales.details.map((s, i) => (
                             <div key={i} className="flex items-center justify-between bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-xs">
                               <div>
                                 <p className="font-semibold text-gray-700">{s.productName} × {s.quantity} {s.unit}</p>
-                                <p className="text-gray-400">সদস্য: {s.memberName} ({s.memberCode}) • {s.collectorName}</p>
+                                <p className="text-gray-400">Member: {s.memberName} ({s.memberCode}) • {s.collectorName}</p>
                               </div>
                               <p className="font-bold text-gray-800">৳{fmt(s.subtotal)}</p>
                             </div>
@@ -324,7 +324,7 @@ const Products = () => {
                 className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-700 hover:via-purple-700 hover:to-pink-700 text-white px-5 py-3.5 rounded-xl font-semibold transition-all flex items-center space-x-2 shadow-md hover:shadow-lg"
               >
                 <BarChart2 className="h-5 w-5" />
-                <span>আজকের রিপোর্ট</span>
+                <span>Today's Report</span>
               </button>
 
               <button
