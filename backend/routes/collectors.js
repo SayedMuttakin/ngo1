@@ -781,7 +781,6 @@ router.get('/:id/savings-overview', protect, async (req, res) => {
 router.get('/:id/daily-report', protect, async (req, res) => {
   try {
     const CollectionHistory = require('../models/CollectionHistory');
-    const Branch = require('../models/Branch');
 
     const { date } = req.query;
 
@@ -809,9 +808,7 @@ router.get('/:id/daily-report', protect, async (req, res) => {
       collector: collector._id,
       collectionDate: { $gte: startUTC, $lte: endUTC },
       isActive: true
-    })
-      .populate('member', 'name memberCode phone branchCode')
-      .populate('installment', 'installmentType note');
+    }).populate('member', 'name memberCode phone branchCode');
 
     // Group by member
     const memberMap = new Map();
@@ -820,8 +817,12 @@ router.get('/:id/daily-report', protect, async (req, res) => {
       const memberId = hist.member?._id?.toString();
       if (!memberId) return;
 
-      // Skip savings-withdrawal (savings going OUT is not a collection-in)
+      // Skip savings-withdrawal (savings going OUT, not a collection-in)
       if (hist.paymentMethod === 'savings_withdrawal') return;
+
+      // Skip product-sale records (they inflate loan amount)
+      const histNote = hist.note || '';
+      if (histNote.includes('Product Sale:') || histNote.includes('Product Loan')) return;
 
       if (!memberMap.has(memberId)) {
         memberMap.set(memberId, {
@@ -830,6 +831,8 @@ router.get('/:id/daily-report', protect, async (req, res) => {
           memberCode: hist.member.memberCode || '',
           phone: hist.member.phone || '',
           branchCode: hist.member.branchCode || hist.branchCode || '',
+          // CollectionHistory stores branch full name directly in hist.branch
+          branchName: hist.branch || hist.member.branchCode || 'N/A',
           loanAmount: 0,
           savingsAmount: 0
         });
@@ -837,12 +840,11 @@ router.get('/:id/daily-report', protect, async (req, res) => {
 
       const entry  = memberMap.get(memberId);
       const amount = hist.collectionAmount || 0;
-      const note   = hist.installment?.note || hist.note || '';
 
+      // Identify savings by note (stored directly in CollectionHistory)
       const isSavings = (
-        hist.installment?.installmentType === 'savings' ||
-        note.includes('Savings Collection') ||
-        note.includes('Initial Savings')
+        histNote.includes('Savings Collection') ||
+        histNote.includes('Initial Savings')
       );
 
       if (isSavings) {
@@ -852,16 +854,9 @@ router.get('/:id/daily-report', protect, async (req, res) => {
       }
     });
 
-    // Resolve branch names from Branch collection
-    const branchCodes = [...new Set([...memberMap.values()].map(m => m.branchCode).filter(Boolean))];
-    const branches = await Branch.find({ branchCode: { $in: branchCodes } }).select('branchCode name');
-    const branchNameMap = {};
-    branches.forEach(b => { branchNameMap[b.branchCode] = b.name; });
-
-    // Build result rows
+    // Build result rows — branchName already set in memberMap from CollectionHistory.branch
     const reportRows = [...memberMap.values()].map(entry => ({
       ...entry,
-      branchName: branchNameMap[entry.branchCode] || entry.branchCode || 'N/A',
       totalCollected: entry.loanAmount + entry.savingsAmount
     }));
 
