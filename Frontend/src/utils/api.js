@@ -567,6 +567,12 @@ export const collectorsAPI = {
   getDailyReport: (collectorId, date = null) => {
     const params = date ? `?date=${date}` : '';
     return apiRequest(`/collectors/${collectorId}/daily-report${params}`);
+  },
+
+  // Get today's savings withdrawals under a collector
+  getTodaysSavingsOut: (collectorId, date = null) => {
+    const params = date ? `?date=${date}` : '';
+    return apiRequest(`/collectors/${collectorId}/todays-savings-out${params}`);
   }
 };
 

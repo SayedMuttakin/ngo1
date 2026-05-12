@@ -893,4 +893,87 @@ router.get('/:id/daily-report', protect, async (req, res) => {
   }
 });
 
+// @desc    Get today's savings withdrawals under a collector
+// @route   GET /api/collectors/:id/todays-savings-out
+// @access  Private
+router.get('/:id/todays-savings-out', protect, async (req, res) => {
+  try {
+    const Installment = require('../models/Installment');
+
+    const { date } = req.query;
+
+    const collector = await User.findById(req.params.id).select('-password');
+    if (!collector || collector.role !== 'collector') {
+      return res.status(404).json({ success: false, message: 'Collector not found' });
+    }
+
+    // BD date range
+    let targetDateStr;
+    if (date) {
+      targetDateStr = date;
+    } else {
+      const now = new Date();
+      const bdNow = new Date(now.getTime() + 6 * 60 * 60 * 1000);
+      targetDateStr = bdNow.toISOString().split('T')[0];
+    }
+
+    const [year, month, day] = targetDateStr.split('-').map(Number);
+    const startUTC = new Date(Date.UTC(year, month - 1, day, 0, 0, 0) - 6 * 60 * 60 * 1000);
+    const endUTC = new Date(Date.UTC(year, month - 1, day, 23, 59, 59) - 6 * 60 * 60 * 1000);
+
+    // Find all members assigned to this collector
+    const members = await Member.find({
+      assignedCollector: collector._id,
+      isActive: true
+    }).select('_id');
+    const memberIds = members.map(m => m._id);
+
+    // Find savings withdrawal records today for these members
+    const withdrawals = await Installment.find({
+      member: { $in: memberIds },
+      note: { $regex: 'Savings Withdrawal|Withdrawal', $options: 'i' },
+      collectionDate: { $gte: startUTC, $lte: endUTC },
+      isActive: true
+    }).populate('member', 'name memberCode phone branchCode');
+
+    // Also check installmentType = extra with withdrawal note
+    const result = withdrawals.map((inst, idx) => ({
+      serial: idx + 1,
+      memberId: inst.member?._id,
+      memberName: inst.member?.name || 'Unknown',
+      memberCode: inst.member?.memberCode || '',
+      phone: inst.member?.phone || '',
+      branchCode: inst.member?.branchCode || '',
+      amount: inst.amount || 0,
+      note: inst.note || '',
+      collectionDate: inst.collectionDate
+    }));
+
+    // Sort by branch
+    result.sort((a, b) => {
+      if (a.branchCode < b.branchCode) return -1;
+      if (a.branchCode > b.branchCode) return 1;
+      return a.memberName.localeCompare(b.memberName);
+    });
+    result.forEach((r, i) => { r.serial = i + 1; });
+
+    const totalOut = result.reduce((s, r) => s + r.amount, 0);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        collector: { id: collector._id, name: collector.name },
+        reportDate: targetDateStr,
+        withdrawals: result,
+        totalWithdrawal: totalOut,
+        count: result.length
+      }
+    });
+
+  } catch (error) {
+    console.error('Todays savings out error:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
 module.exports = router;

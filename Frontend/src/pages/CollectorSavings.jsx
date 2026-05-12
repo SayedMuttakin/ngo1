@@ -9,7 +9,12 @@ import {
   DollarSign,
   RefreshCw,
   Search,
-  AlertCircle
+  AlertCircle,
+  ArrowDownCircle,
+  X,
+  Calendar,
+  Building2,
+  Phone
 } from 'lucide-react';
 
 const formatCurrency = (amount) => {
@@ -17,6 +22,179 @@ const formatCurrency = (amount) => {
   return `৳${num.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 };
 
+const getTodayBD = () => {
+  const now = new Date();
+  const bdNow = new Date(now.getTime() + 6 * 60 * 60 * 1000);
+  return bdNow.toISOString().split('T')[0];
+};
+
+const formatDateBD = (dateStr) => {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('bn-BD', { day: '2-digit', month: 'short', year: 'numeric' }) ||
+    d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+// ─── Today's Savings Out Modal ────────────────────────────────────────────────
+function TodaysSavingsOutModal({ collectorId, collectorName, onClose }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [date, setDate] = useState(getTodayBD());
+
+  const fetchData = async (d) => {
+    try {
+      setLoading(true);
+      setError('');
+      const res = await collectorsAPI.getTodaysSavingsOut(collectorId, d);
+      if (res.success) {
+        setData(res.data);
+      } else {
+        setError(res.message || 'ডেটা পাওয়া যায়নি।');
+      }
+    } catch (e) {
+      setError('ডেটা লোড করতে সমস্যা হয়েছে।');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchData(date); }, [collectorId]);
+
+  const handleDateChange = (e) => {
+    setDate(e.target.value);
+    fetchData(e.target.value);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" style={{ animation: 'fadeScaleIn 0.25s ease' }}>
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-6 py-5 bg-gradient-to-r from-rose-500 via-red-500 to-orange-500 text-white rounded-t-3xl flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="bg-white/20 rounded-xl p-2.5">
+              <ArrowDownCircle className="h-6 w-6" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold">আজকের Savings Out</h2>
+              <p className="text-rose-100 text-sm">{collectorName} — যারা সঞ্চয় তুলেছেন</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="bg-white/20 hover:bg-white/30 rounded-xl p-2 transition-all"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Date picker */}
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3 flex-shrink-0">
+          <Calendar className="h-4 w-4 text-gray-400" />
+          <label className="text-sm font-medium text-gray-600">তারিখ:</label>
+          <input
+            type="date"
+            value={date}
+            onChange={handleDateChange}
+            className="border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-rose-400 bg-gray-50"
+          />
+        </div>
+
+        {/* Content */}
+        <div className="overflow-y-auto flex-1 p-6">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-12 gap-3">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-rose-500"></div>
+              <p className="text-gray-500 text-sm">লোড হচ্ছে...</p>
+            </div>
+          ) : error ? (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+              <p className="text-red-700 text-sm">{error}</p>
+            </div>
+          ) : data?.withdrawals?.length === 0 ? (
+            <div className="text-center py-12">
+              <ArrowDownCircle className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-500 font-medium">আজকে কোনো savings withdrawal নেই।</p>
+              <p className="text-gray-400 text-sm mt-1">{date} তারিখে কেউ সঞ্চয় তোলেনি।</p>
+            </div>
+          ) : (
+            <>
+              {/* Summary badge */}
+              <div className="flex flex-wrap items-center gap-3 mb-5">
+                <div className="bg-rose-50 border border-rose-200 rounded-xl px-4 py-2.5 flex items-center gap-2">
+                  <Users className="h-4 w-4 text-rose-600" />
+                  <span className="text-sm font-semibold text-rose-800">{data.count} জন সদস্য</span>
+                </div>
+                <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 flex items-center gap-2">
+                  <TrendingDown className="h-4 w-4 text-red-600" />
+                  <span className="text-sm font-semibold text-red-800">মোট উত্তোলন: <span className="text-red-600">{formatCurrency(data.totalWithdrawal)}</span></span>
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto rounded-2xl border border-gray-200">
+                <table className="w-full text-sm">
+                  <thead className="bg-rose-50 border-b border-rose-200">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold text-rose-800 w-10">S/L</th>
+                      <th className="px-4 py-3 text-left font-semibold text-rose-800">সদস্যের নাম</th>
+                      <th className="px-4 py-3 text-left font-semibold text-rose-800">কোড</th>
+                      <th className="px-4 py-3 text-left font-semibold text-rose-800">Branch</th>
+                      <th className="px-4 py-3 text-right font-semibold text-rose-800">উত্তোলন (৳)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {data.withdrawals.map((w) => (
+                      <tr key={w.serial} className="hover:bg-rose-50/40 transition-colors">
+                        <td className="px-4 py-3 text-gray-400 font-medium">{w.serial}</td>
+                        <td className="px-4 py-3">
+                          <div className="font-semibold text-gray-900">{w.memberName}</div>
+                          {w.phone && (
+                            <div className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
+                              <Phone className="h-3 w-3" />{w.phone}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-500 font-mono text-xs">{w.memberCode || '—'}</td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium bg-orange-100 text-orange-700">
+                            <Building2 className="h-3 w-3" />
+                            {w.branchCode || '—'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-bold text-red-600 text-base">
+                          {formatCurrency(w.amount)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-red-50 border-t-2 border-red-200">
+                    <tr>
+                      <td colSpan={4} className="px-4 py-3 font-bold text-red-800">মোট উত্তোলন</td>
+                      <td className="px-4 py-3 text-right font-bold text-red-700 text-base">
+                        {formatCurrency(data.totalWithdrawal)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes fadeScaleIn {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ─── Main Page ─────────────────────────────────────────────────────────────────
 export default function CollectorSavings() {
   const [collectors, setCollectors] = useState([]);
   const [selectedCollector, setSelectedCollector] = useState('');
@@ -25,8 +203,8 @@ export default function CollectorSavings() {
   const [collectorsLoading, setCollectorsLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [showSavingsOutModal, setShowSavingsOutModal] = useState(false);
 
-  // Load all collectors on mount
   useEffect(() => {
     const fetchCollectors = async () => {
       try {
@@ -46,6 +224,7 @@ export default function CollectorSavings() {
     setSelectedCollector(collectorId);
     setOverview(null);
     setError('');
+    setShowSavingsOutModal(false);
     if (!collectorId) return;
     try {
       setLoading(true);
@@ -72,6 +251,8 @@ export default function CollectorSavings() {
     m.memberCode?.toLowerCase().includes(search.toLowerCase()) ||
     m.branchCode?.toLowerCase().includes(search.toLowerCase())
   );
+
+  const selectedCollectorObj = collectors.find(c => c._id === selectedCollector);
 
   return (
     <div className="space-y-6">
@@ -104,9 +285,7 @@ export default function CollectorSavings() {
 
       {/* Collector Selector */}
       <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
-        <label className="block text-sm font-semibold text-gray-700 mb-2">
-          Select Collector
-        </label>
+        <label className="block text-sm font-semibold text-gray-700 mb-2">Select Collector</label>
         <div className="relative">
           <select
             value={selectedCollector}
@@ -123,9 +302,7 @@ export default function CollectorSavings() {
           </select>
           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
         </div>
-        {collectorsLoading && (
-          <p className="text-sm text-gray-500 mt-2">Loading collectors...</p>
-        )}
+        {collectorsLoading && <p className="text-sm text-gray-500 mt-2">Loading collectors...</p>}
       </div>
 
       {/* Loading */}
@@ -144,7 +321,7 @@ export default function CollectorSavings() {
         </div>
       )}
 
-      {/* Summary Cards */}
+      {/* Summary Cards + Today's Savings Out Button */}
       {overview && !loading && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -172,9 +349,17 @@ export default function CollectorSavings() {
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-5">
+            {/* Savings Out Card — clickable */}
+            <button
+              onClick={() => setShowSavingsOutModal(true)}
+              className="bg-white rounded-2xl shadow-lg border-2 border-red-200 hover:border-red-400 p-5 text-left transition-all group hover:shadow-xl hover:-translate-y-0.5 cursor-pointer relative overflow-hidden"
+              title="আজকের Savings Out দেখুন"
+            >
+              <div className="absolute top-2 right-2">
+                <span className="text-[10px] bg-red-100 text-red-600 font-bold px-1.5 py-0.5 rounded-md">আজকে দেখুন →</span>
+              </div>
               <div className="flex items-center space-x-3">
-                <div className="bg-red-100 rounded-xl p-2.5">
+                <div className="bg-red-100 group-hover:bg-red-200 rounded-xl p-2.5 transition-colors">
                   <TrendingDown className="h-5 w-5 text-red-500" />
                 </div>
                 <div>
@@ -182,7 +367,7 @@ export default function CollectorSavings() {
                   <p className="text-2xl font-bold text-red-500">{formatCurrency(overview.summary.totalSavingsOut)}</p>
                 </div>
               </div>
-            </div>
+            </button>
 
             <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl shadow-lg p-5">
               <div className="flex items-center space-x-3">
@@ -195,6 +380,17 @@ export default function CollectorSavings() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Today's Savings Out dedicated button row */}
+          <div className="flex justify-end">
+            <button
+              onClick={() => setShowSavingsOutModal(true)}
+              className="flex items-center gap-2 bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-600 hover:to-red-600 text-white px-5 py-2.5 rounded-xl font-semibold shadow-md hover:shadow-lg transition-all"
+            >
+              <ArrowDownCircle className="h-5 w-5" />
+              আজকের Savings Out তালিকা দেখুন
+            </button>
           </div>
 
           {/* Member Table */}
@@ -286,7 +482,7 @@ export default function CollectorSavings() {
         </>
       )}
 
-      {/* Placeholder when no collector selected */}
+      {/* Placeholder */}
       {!selectedCollector && !loading && (
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-16 text-center">
           <PiggyBank className="h-16 w-16 text-gray-300 mx-auto mb-4" />
@@ -295,6 +491,15 @@ export default function CollectorSavings() {
             Choose a collector above to view the net savings balance of all members under them.
           </p>
         </div>
+      )}
+
+      {/* Today's Savings Out Modal */}
+      {showSavingsOutModal && selectedCollector && (
+        <TodaysSavingsOutModal
+          collectorId={selectedCollector}
+          collectorName={selectedCollectorObj?.name || 'Collector'}
+          onClose={() => setShowSavingsOutModal(false)}
+        />
       )}
     </div>
   );
