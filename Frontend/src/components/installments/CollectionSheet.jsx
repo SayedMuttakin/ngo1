@@ -819,12 +819,21 @@ const CollectionSheet = ({ selectedCollector, selectedBranch, selectedDay, onGoB
 
         const isAutoDeduction = record.paymentMethod === 'savings_deduction' || note.includes('deducted from savings');
 
+        // ✅ KEY FIX: Determine if this is a monthly loan installment
+        const isMonthlyLoanRecord = type === 'regular' && note && note.includes('Product Loan') &&
+          (record.installmentFrequency === 'monthly' ||
+            (monthlyDistributions && monthlyDistributions.has(record.distributionId)));
+
         // CRITICAL FIX: Use appropriate date based on transaction type
         if (isAutoDeduction) {
           // For auto deductions: Always use COLLECTION DATE (when deduction was processed)
           recordDate = record.collectionDate || record.date || record.createdAt;
+        } else if (isMonthlyLoanRecord) {
+          // ✅ KEY FIX: For MONTHLY loans (pending, partial, OR collected) → ALWAYS use DUE DATE
+          // This ensures partial/collected monthly installments appear in their correct scheduled column
+          recordDate = record.dueDate || record.installmentDate || record.collectionDate || record.date || record.createdAt;
         } else if (record.status === 'collected' || record.status === 'partial') {
-          // For collected/partial installments: Use COLLECTION DATE (when it was actually collected)
+          // For collected/partial weekly/daily installments: Use COLLECTION DATE (within ±3 day range)
           recordDate = record.collectionDate || record.date || record.createdAt;
         } else {
           // For pending installments: Use DUE DATE (scheduled installment date)
@@ -2498,15 +2507,37 @@ const CollectionSheet = ({ selectedCollector, selectedBranch, selectedDay, onGoB
                                       ? { loanAmount: 0, savingsInAmount: 0, savingsOutAmount: 0 } // Empty if no installment due
                                       : getProductSpecificCollection(member, date, consolidatedProductData, products, transactionIndex === 0);
 
-                                    // 🎯 NEW FIX: For monthly installments, ONLY show if actual collection data exists
-                                    // This ensures loan amount appears ONLY on columns matching exact due dates
+                                    // 🎯 For monthly installments, show if:
+                                    // 1. There's an actual collected/partial record matching this due date, OR
+                                    // 2. There's a PENDING installment with exact due date matching this column date
                                     const isMonthlyProduct = installmentFrequency === 'monthly';
+
+                                    // Check for any installment (pending, partial, or collected) with due date = this column date
+                                    const columnDateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                                    const hasMonthlyInstallmentOnThisDate = isMonthlyProduct && (member.allInstallmentRecords || []).some(rec => {
+                                      if (rec.installmentType !== 'regular') return false;
+                                      if (!rec.note || !rec.note.includes('Product Loan')) return false;
+                                      // Must belong to this row's distribution
+                                      const recDistId = rec.distributionId;
+                                      const rowDistIds = products.map(p => p.distributionId).filter(Boolean);
+                                      if (recDistId && rowDistIds.length > 0 && !rowDistIds.some(id =>
+                                        id === recDistId || (recDistId && recDistId.includes(id)) || (id && id.includes(recDistId))
+                                      )) return false;
+                                      // Check due date match
+                                      const dueDateObj = rec.dueDate ? new Date(rec.dueDate) : null;
+                                      if (!dueDateObj || isNaN(dueDateObj.getTime())) return false;
+                                      const dueDateStr = `${dueDateObj.getFullYear()}-${String(dueDateObj.getMonth() + 1).padStart(2, '0')}-${String(dueDateObj.getDate()).padStart(2, '0')}`;
+                                      return dueDateStr === columnDateStr;
+                                    });
+
                                     const hasActualLoanCollection = collection.loanAmount > 0;
+                                    // Monthly: show if there's an installment due this date (pending/partial/collected)
+                                    const monthlyShowCondition = hasActualLoanCollection || hasMonthlyInstallmentOnThisDate;
 
                                     // ✅ FIXED: Display logic
                                     // - DAILY: Show ONLY if installment due on this date
                                     // - WEEKLY: Show if delivery has happened (all weekly dates after delivery)
-                                    // - MONTHLY: Show ONLY if actual installment due on THIS EXACT date
+                                    // - MONTHLY: Show ONLY if installment due OR collected/partial on THIS EXACT date
                                     // - Loan box: Show SCHEDULED amount (weekly) OR ONLY when actual match (monthly)
                                     // - Sav In box: Show EXPECTED savings
                                     // - Sav Out box: Show ACTUAL withdrawals
@@ -2514,13 +2545,13 @@ const CollectionSheet = ({ selectedCollector, selectedBranch, selectedDay, onGoB
                                     const displayLoan = !shouldShowAmount
                                       ? '' // Empty if before delivery
                                       : isMonthlyProduct
-                                        ? (hasActualLoanCollection ? formatCurrency(scheduledInstallmentAmount) : '') // Monthly: show ONLY if exact match
+                                        ? (monthlyShowCondition ? formatCurrency(scheduledInstallmentAmount) : '') // Monthly: show if due or collected
                                         : (scheduledInstallmentAmount > 0 ? formatCurrency(scheduledInstallmentAmount) : ''); // Weekly/Daily: show always after delivery
 
                                     const displaySavingsIn = !shouldShowAmount
                                       ? '' // Empty if before delivery
                                       : isMonthlyProduct
-                                        ? (hasActualLoanCollection ? `৳${expectedSavings}` : '') // Monthly: show ONLY when loan also shows (exact match)
+                                        ? (monthlyShowCondition ? `৳${expectedSavings}` : '') // Monthly: show ONLY when loan also shows
                                         : `৳${expectedSavings}`; // Weekly/Daily: show always after delivery
 
                                     return (
