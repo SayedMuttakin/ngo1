@@ -820,9 +820,10 @@ router.get('/:id/daily-report', protect, async (req, res) => {
       // Skip savings-withdrawal (savings going OUT, not a collection-in)
       if (hist.paymentMethod === 'savings_withdrawal') return;
 
-      // Skip product-sale records (they inflate loan amount)
+      // Skip negative correction records
+      if ((hist.collectionAmount || 0) <= 0) return;
+
       const histNote = hist.note || '';
-      if (histNote.includes('Product Sale:') || histNote.includes('Product Loan')) return;
 
       if (!memberMap.has(memberId)) {
         memberMap.set(memberId, {
@@ -841,7 +842,7 @@ router.get('/:id/daily-report', protect, async (req, res) => {
       const entry  = memberMap.get(memberId);
       const amount = hist.collectionAmount || 0;
 
-      // Identify savings by note (stored directly in CollectionHistory)
+      // Savings: identified by note content
       const isSavings = (
         histNote.includes('Savings Collection') ||
         histNote.includes('Initial Savings')
@@ -850,6 +851,7 @@ router.get('/:id/daily-report', protect, async (req, res) => {
       if (isSavings) {
         entry.savingsAmount += amount;
       } else {
+        // Everything else (regular loan, product loan, etc.) = loan/installment collection
         entry.loanAmount += amount;
       }
     });
