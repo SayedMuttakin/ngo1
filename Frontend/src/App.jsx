@@ -27,6 +27,8 @@ import PendingInstallments from './pages/PendingInstallments';
 import ActivityLog from './pages/ActivityLog';
 import SMSManagement from './pages/SMSManagement';
 import AdminControlPanel from './pages/AdminControlPanel';
+import CollectorSavings from './pages/CollectorSavings';
+import DailyCollectionReport from './pages/DailyCollectionReport';
 
 // Context
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -88,6 +90,8 @@ function AppContent() {
               <Route path="total-due" element={<TotalDue />} />
               <Route path="sms-management" element={<SMSManagement />} />
               <Route path="admin-control-panel" element={<AdminControlPanel />} />
+              <Route path="collector-savings" element={<CollectorSavings />} />
+              <Route path="daily-collection-report" element={<DailyCollectionReport />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </>

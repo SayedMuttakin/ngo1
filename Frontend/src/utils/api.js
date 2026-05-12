@@ -558,7 +558,16 @@ export const collectorsAPI = {
   }),
 
   // Get collectors due amounts
-  getDueAmounts: () => apiRequest('/collectors/due-amounts')
+  getDueAmounts: () => apiRequest('/collectors/due-amounts'),
+
+  // Get collector's savings overview (net savings of all members)
+  getSavingsOverview: (collectorId) => apiRequest(`/collectors/${collectorId}/savings-overview`),
+
+  // Get collector's daily collection report
+  getDailyReport: (collectorId, date = null) => {
+    const params = date ? `?date=${date}` : '';
+    return apiRequest(`/collectors/${collectorId}/daily-report${params}`);
+  }
 };
 
 // SMS API functions

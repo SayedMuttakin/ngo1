@@ -19,7 +19,9 @@ import {
   PiggyBank,
   Activity,
   MessageSquare,
-  Shield
+  Shield,
+  ClipboardList,
+  Banknote
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import logo from '../assets/logo.png';
@@ -44,6 +46,8 @@ const DashboardLayout = () => {
     { id: 'total-due', name: 'Total Due Amount', icon: AlertCircle, path: '/total-due' },
     { id: 'sms-management', name: 'SMS Management', icon: MessageSquare, path: '/sms-management' },
     { id: 'admin-control-panel', name: 'Admin Control Panel', icon: Shield, path: '/admin-control-panel' },
+    { id: 'collector-savings', name: 'Collector Savings', icon: Banknote, path: '/collector-savings' },
+    { id: 'daily-collection-report', name: 'Daily Collection Report', icon: ClipboardList, path: '/daily-collection-report' },
     { id: 'profile', name: 'Profile', icon: UserCircle, path: '/profile' },
   ];
 
@@ -236,7 +240,9 @@ const getPageTitle = (pathname) => {
     '/daily-savings': 'Daily Total Savings',
     '/total-due': 'Total Due Amount',
     '/sms-management': 'SMS Management',
-    '/admin-control-panel': 'Admin Control Panel'
+    '/admin-control-panel': 'Admin Control Panel',
+    '/collector-savings': 'Collector Savings Overview',
+    '/daily-collection-report': 'Daily Collection Report'
   };
 
   // Handle member profile pages
