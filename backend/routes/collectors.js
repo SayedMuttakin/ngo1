@@ -698,5 +698,199 @@ router.delete('/:id', protect, authorize('admin', 'manager'), async (req, res) =
     });
   }
 });
+// @desc    Get collector savings overview (net savings of all members)
+// @route   GET /api/collectors/:id/savings-overview
+// @access  Private
+router.get('/:id/savings-overview', protect, async (req, res) => {
+  try {
+    const Installment = require('../models/Installment');
+
+    const collector = await User.findById(req.params.id).select('-password');
+    if (!collector || collector.role !== 'collector') {
+      return res.status(404).json({ success: false, message: 'Collector not found' });
+    }
+
+    // Get all members assigned to this collector
+    const members = await Member.find({
+      assignedCollector: collector._id,
+      isActive: true
+    }).select('name memberCode phone branchCode totalSavings');
+
+    // For each member, calculate net savings = savings_in - savings_out
+    const memberSavingsDetails = await Promise.all(
+      members.map(async (member, idx) => {
+        const savingsRecords = await Installment.find({
+          member: member._id,
+          installmentType: { $in: ['extra', 'savings'] },
+          isActive: true
+        }).select('amount note installmentType collectionDate status');
+
+        let savingsIn = 0;
+        let savingsOut = 0;
+
+        savingsRecords.forEach(rec => {
+          const note = rec.note || '';
+          if (note.match(/Product Sale:.+\(Qty:/)) return; // Exclude product sale records
+          const isSavingsWithdrawal = note.includes('Savings Withdrawal') || note.includes('Withdrawal');
+          const isSavingsCollection = note.includes('Savings Collection') || note.includes('Initial Savings');
+          if (isSavingsWithdrawal) {
+            savingsOut += rec.amount || 0;
+          } else if (isSavingsCollection) {
+            savingsIn += rec.amount || 0;
+          }
+        });
+
+        const netSavings = Math.max(0, savingsIn - savingsOut);
+
+        return {
+          serial: idx + 1,
+          memberId: member._id,
+          name: member.name,
+          memberCode: member.memberCode || '',
+          phone: member.phone || '',
+          branchCode: member.branchCode || '',
+          savingsIn,
+          savingsOut,
+          netSavings
+        };
+      })
+    );
+
+    const totalSavingsIn = memberSavingsDetails.reduce((s, m) => s + m.savingsIn, 0);
+    const totalSavingsOut = memberSavingsDetails.reduce((s, m) => s + m.savingsOut, 0);
+    const totalNetSavings = memberSavingsDetails.reduce((s, m) => s + m.netSavings, 0);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        collector: { id: collector._id, name: collector.name, phone: collector.phone },
+        members: memberSavingsDetails,
+        summary: { totalSavingsIn, totalSavingsOut, totalNetSavings, memberCount: members.length }
+      }
+    });
+
+  } catch (error) {
+    console.error('Collector savings overview error:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
+// @desc    Get collector daily collection report (today's installments & savings)
+// @route   GET /api/collectors/:id/daily-report
+// @access  Private
+router.get('/:id/daily-report', protect, async (req, res) => {
+  try {
+    const Installment = require('../models/Installment');
+    const Branch = require('../models/Branch');
+
+    const { date } = req.query;
+
+    const collector = await User.findById(req.params.id).select('-password');
+    if (!collector || collector.role !== 'collector') {
+      return res.status(404).json({ success: false, message: 'Collector not found' });
+    }
+
+    // Build date range for the target day (Bangladesh = UTC+6)
+    let targetDateStr;
+    if (date) {
+      targetDateStr = date; // YYYY-MM-DD
+    } else {
+      const now = new Date();
+      const bdNow = new Date(now.getTime() + 6 * 60 * 60 * 1000);
+      targetDateStr = bdNow.toISOString().split('T')[0];
+    }
+
+    // Parse the date and create UTC start/end covering full BD day
+    const [year, month, day] = targetDateStr.split('-').map(Number);
+    // BD midnight = UTC 18:00 previous day, BD 23:59 = UTC 17:59 same day
+    const startUTC = new Date(Date.UTC(year, month - 1, day, 0, 0, 0) - 6 * 60 * 60 * 1000);
+    const endUTC = new Date(Date.UTC(year, month - 1, day, 23, 59, 59) - 6 * 60 * 60 * 1000);
+
+    // Get installments collected today by this collector
+    const todayInstallments = await Installment.find({
+      collector: collector._id,
+      status: { $in: ['collected', 'partial'] },
+      collectionDate: { $gte: startUTC, $lte: endUTC },
+      isActive: true
+    }).populate('member', 'name memberCode phone branchCode');
+
+    // Group by member
+    const memberMap = new Map();
+
+    todayInstallments.forEach(inst => {
+      const memberId = inst.member?._id?.toString();
+      if (!memberId) return;
+
+      if (!memberMap.has(memberId)) {
+        memberMap.set(memberId, {
+          memberId,
+          memberName: inst.member.name || 'Unknown',
+          memberCode: inst.member.memberCode || '',
+          phone: inst.member.phone || '',
+          branchCode: inst.member.branchCode || '',
+          loanAmount: 0,
+          savingsAmount: 0
+        });
+      }
+
+      const entry = memberMap.get(memberId);
+      const note = inst.note || '';
+      const amount = inst.paidAmount || inst.amount || 0;
+
+      const isSavingsCollection = (inst.installmentType === 'extra' || inst.installmentType === 'savings') &&
+        (note.includes('Savings Collection') || note.includes('Initial Savings'));
+
+      if (isSavingsCollection) {
+        entry.savingsAmount += amount;
+      } else {
+        entry.loanAmount += amount;
+      }
+    });
+
+    // Get branch names
+    const branchCodes = [...new Set([...memberMap.values()].map(m => m.branchCode).filter(Boolean))];
+    const branches = await Branch.find({ branchCode: { $in: branchCodes } }).select('branchCode name');
+    const branchNameMap = {};
+    branches.forEach(b => { branchNameMap[b.branchCode] = b.name; });
+
+    // Build result rows
+    const reportRows = [...memberMap.values()].map(entry => ({
+      ...entry,
+      branchName: branchNameMap[entry.branchCode] || entry.branchCode || 'N/A',
+      totalCollected: entry.loanAmount + entry.savingsAmount
+    }));
+
+    // Sort by branch then member name
+    reportRows.sort((a, b) => {
+      if (a.branchCode < b.branchCode) return -1;
+      if (a.branchCode > b.branchCode) return 1;
+      return a.memberName.localeCompare(b.memberName);
+    });
+    reportRows.forEach((r, i) => { r.serial = i + 1; });
+
+    const totalLoan = reportRows.reduce((s, r) => s + r.loanAmount, 0);
+    const totalSavings = reportRows.reduce((s, r) => s + r.savingsAmount, 0);
+    const totalCollection = reportRows.reduce((s, r) => s + r.totalCollected, 0);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        collector: { id: collector._id, name: collector.name, phone: collector.phone },
+        reportDate: targetDateStr,
+        members: reportRows,
+        summary: {
+          memberCount: reportRows.length,
+          totalLoanCollection: totalLoan,
+          totalSavingsCollection: totalSavings,
+          totalCollection
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Collector daily report error:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
 
 module.exports = router;
