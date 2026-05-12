@@ -16,6 +16,10 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
   const [savingsAmount, setSavingsAmount] = useState('');
   const [savingsType, setSavingsType] = useState('in'); // 'in' or 'out'
   const [showHistory, setShowHistory] = useState(false); // Toggle history view
+  const [showCorrectionModal, setShowCorrectionModal] = useState(false);
+  const [correctionInstallment, setCorrectionInstallment] = useState(null);
+  const [correctionAmount, setCorrectionAmount] = useState('');
+  const [correctionReason, setCorrectionReason] = useState('');
 
   // InstallmentCard component for individual installment display
   const InstallmentCard = ({ installment }) => {
@@ -82,6 +86,18 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
                   <span className="text-lg">✅</span>
                   <span className="text-green-700 font-bold text-sm">COLLECTED</span>
                 </div>
+              )}
+
+              {/* 🔴 Correction button - shown when installment has any paid amount */}
+              {(installment.status === 'paid' || installment.status === 'partial' || installment.paidAmount > 0) && (
+                <button
+                  onClick={() => handleOpenCorrection(installment)}
+                  disabled={isSubmitting}
+                  title="Apply correction / deduct from collected amount"
+                  className="px-4 py-2 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white rounded-lg font-medium transition-all duration-300 disabled:opacity-50 text-sm flex items-center justify-center gap-1"
+                >
+                  <span>⚡</span> Correction
+                </button>
               )}
 
               <button
@@ -960,6 +976,82 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
       : 'Partial payment';
 
     await collectInstallment(selectedInstallment, amount, description);
+  };
+
+  // ────────────────────────────────────────────────────────────
+  // CORRECTION HANDLERS
+  // ────────────────────────────────────────────────────────────
+  const handleOpenCorrection = (installment) => {
+    setCorrectionInstallment(installment);
+    setCorrectionAmount('');
+    setCorrectionReason('');
+    setShowCorrectionModal(true);
+  };
+
+  const handleApplyCorrection = async () => {
+    const amount = parseFloat(correctionAmount);
+    if (!correctionInstallment) return;
+
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Please enter a valid deduction amount');
+      return;
+    }
+
+    const maxDeduct = correctionInstallment.paidAmount || 0;
+    if (amount > maxDeduct) {
+      toast.error(`Cannot deduct more than ৳${maxDeduct} (the paid amount)`);
+      return;
+    }
+
+    if (!correctionReason.trim()) {
+      toast.error('Please enter a reason for this correction');
+      return;
+    }
+
+    setIsSubmitting(true);
+    const loadingToast = toast.loading('Applying correction...');
+
+    try {
+      const response = await installmentsAPI.correct({
+        installmentId: correctionInstallment.originalInstallment?._id || correctionInstallment._id,
+        memberId: selectedMember._id,
+        deductAmount: amount,
+        reason: correctionReason.trim()
+      });
+
+      toast.dismiss(loadingToast);
+
+      if (response.success) {
+        toast.success(`✅ Correction applied: ৳${amount} deducted successfully!`, { duration: 4000 });
+        setShowCorrectionModal(false);
+        setCorrectionInstallment(null);
+        setCorrectionAmount('');
+        setCorrectionReason('');
+
+        // Refresh data
+        await loadMemberInstallments();
+        onInstallmentCollected();
+
+        // Trigger dashboard refresh
+        triggerCollectionUpdate({
+          memberId: selectedMember._id,
+          memberName: selectedMember.name,
+          amount: -amount,
+          installmentId: correctionInstallment.originalInstallment?._id || correctionInstallment._id,
+          status: 'correction',
+          collectionDate: new Date().toISOString(),
+          note: `Correction: -৳${amount} for ${correctionInstallment.productName}. Reason: ${correctionReason}`
+        });
+      } else {
+        toast.error(response.message || 'Failed to apply correction');
+      }
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      console.error('Correction error:', error);
+      toast.error('Failed to apply correction. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Function to recalculate due dates for member's installments
@@ -2084,6 +2176,121 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
                 >
                   {isSubmitting ? 'Processing...' : (savingsType === 'in' ? 'Collect Savings' : 'Withdraw Savings')}
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* ─── CORRECTION MODAL ─── */}
+        {showCorrectionModal && correctionInstallment && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+            <div className="bg-white rounded-3xl shadow-2xl border border-red-100 w-full max-w-md overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300">
+
+              {/* Header */}
+              <div className="bg-gradient-to-r from-red-600 to-rose-600 text-white p-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-white/20 rounded-full p-2">
+                      <span className="text-xl">⚡</span>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold">Installment Correction</h3>
+                      <p className="text-red-100 text-sm">Deduct from collected amount</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setShowCorrectionModal(false); setCorrectionInstallment(null); }}
+                    className="text-white/80 hover:text-white text-2xl font-light"
+                  >×</button>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-5">
+                {/* Installment Info */}
+                <div className="bg-red-50 border border-red-200 rounded-2xl p-4 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-semibold text-gray-600">Installment</span>
+                    <span className="text-sm font-bold text-gray-800">
+                      #{correctionInstallment.installmentNumber} — {correctionInstallment.productName}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-semibold text-gray-600">Total Amount</span>
+                    <span className="text-sm font-bold text-gray-800">৳{correctionInstallment.amount?.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-semibold text-green-700">Already Paid</span>
+                    <span className="text-base font-bold text-green-700">৳{correctionInstallment.paidAmount?.toLocaleString() || 0}</span>
+                  </div>
+                  <div className="h-px bg-red-200 my-1" />
+                  <p className="text-xs text-red-600 font-medium">
+                    ⚠️ You can deduct up to ৳{correctionInstallment.paidAmount || 0} (the paid amount).
+                  </p>
+                </div>
+
+                {/* Deduction Amount */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    Deduction Amount (৳) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={correctionAmount}
+                    onChange={(e) => setCorrectionAmount(e.target.value)}
+                    placeholder="Enter amount to deduct"
+                    min="1"
+                    max={correctionInstallment.paidAmount || 0}
+                    step="1"
+                    className="w-full px-4 py-3 border-2 border-red-200 rounded-xl focus:ring-2 focus:ring-red-400 focus:border-transparent text-lg font-semibold"
+                    autoFocus
+                  />
+                  {correctionAmount && parseFloat(correctionAmount) > 0 && (
+                    <div className="mt-2 bg-red-50 border border-red-200 rounded-xl p-3">
+                      <p className="text-red-700 font-bold text-sm">
+                        Will deduct: ৳{parseFloat(correctionAmount).toLocaleString()}
+                      </p>
+                      <p className="text-red-500 text-xs mt-1">
+                        New paid amount: ৳{Math.max(0, (correctionInstallment.paidAmount || 0) - parseFloat(correctionAmount)).toLocaleString()}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Reason */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    Reason for Correction <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={correctionReason}
+                    onChange={(e) => setCorrectionReason(e.target.value)}
+                    placeholder="e.g. Collected ৳5100 instead of ৳4500 by mistake"
+                    rows={3}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-400 focus:border-transparent text-sm resize-none"
+                  />
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 pt-1">
+                  <button
+                    onClick={() => { setShowCorrectionModal(false); setCorrectionInstallment(null); }}
+                    className="flex-1 px-5 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 font-semibold transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleApplyCorrection}
+                    disabled={
+                      isSubmitting ||
+                      !correctionAmount ||
+                      parseFloat(correctionAmount) <= 0 ||
+                      parseFloat(correctionAmount) > (correctionInstallment.paidAmount || 0) ||
+                      !correctionReason.trim()
+                    }
+                    className="flex-1 px-5 py-3 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white rounded-xl font-bold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-red-200"
+                  >
+                    {isSubmitting ? '⏳ Applying...' : '⚡ Apply Correction'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

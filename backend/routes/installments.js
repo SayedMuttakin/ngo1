@@ -2228,6 +2228,161 @@ router.get('/:id', protect, async (req, res) => {
   }
 });
 
+// @desc    Correct/adjust a collected installment (deduct from paid amount)
+// @route   POST /api/installments/correct
+// @access  Private
+router.post('/correct', protect, async (req, res) => {
+  try {
+    const {
+      installmentId,
+      deductAmount,
+      reason,
+      memberId
+    } = req.body;
+
+    // Validate required fields
+    if (!installmentId || !deductAmount || !memberId) {
+      return res.status(400).json({
+        success: false,
+        message: 'installmentId, deductAmount, and memberId are required'
+      });
+    }
+
+    const deduction = parseFloat(deductAmount);
+    if (isNaN(deduction) || deduction <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'deductAmount must be a positive number'
+      });
+    }
+
+    // Find the installment
+    const installment = await Installment.findOne({
+      _id: installmentId,
+      member: memberId,
+      isActive: true
+    });
+
+    if (!installment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Installment not found'
+      });
+    }
+
+    const currentPaid = parseFloat(installment.paidAmount) || 0;
+    if (deduction > currentPaid) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot deduct ৳${deduction}. Only ৳${currentPaid} has been paid on this installment.`
+      });
+    }
+
+    // Find the member
+    const member = await Member.findById(memberId);
+    if (!member) {
+      return res.status(404).json({ success: false, message: 'Member not found' });
+    }
+
+    // --- Apply correction ---
+    const newPaidAmount = Math.max(0, currentPaid - deduction);
+    const newRemainingAmount = Math.max(0, installment.amount - newPaidAmount);
+
+    // Update installment status based on new paid amount
+    let newStatus = installment.status;
+    if (newPaidAmount <= 0) {
+      newStatus = 'pending';
+    } else if (newPaidAmount < installment.amount) {
+      newStatus = 'partial';
+    } else {
+      newStatus = 'collected';
+    }
+
+    installment.paidAmount = newPaidAmount;
+    installment.remainingAmount = newRemainingAmount;
+    installment.status = newStatus;
+    installment.updatedBy = req.user.id;
+
+    // Add correction to paymentHistory for audit trail
+    if (!installment.paymentHistory) {
+      installment.paymentHistory = [];
+    }
+    installment.paymentHistory.push({
+      amount: -deduction,
+      date: new Date(),
+      collector: req.user.id,
+      receiptNumber: `CORR-${Date.now()}`,
+      note: `CORRECTION: -৳${deduction}. Reason: ${reason || 'No reason provided'}`
+    });
+
+    await installment.save();
+
+    // Update member's totalPaid (deduct the corrected amount)
+    member.totalPaid = Math.max(0, (member.totalPaid || 0) - deduction);
+    member.updatedBy = req.user.id;
+    await member.save();
+
+    // Create a NEGATIVE CollectionHistory record for audit trail
+    const correctionReceiptNumber = `CORR-${Date.now()}`;
+    try {
+      await CollectionHistory.create({
+        installment: installment._id,
+        member: memberId,
+        collector: req.user.id,
+        collectionAmount: -deduction, // Negative amount = correction
+        collectionDate: new Date(),
+        receiptNumber: correctionReceiptNumber,
+        paymentMethod: 'correction',
+        outstandingAfterCollection: newRemainingAmount,
+        installmentTarget: installment.amount,
+        installmentDue: newRemainingAmount,
+        distributionId: installment.distributionId || null,
+        branch: installment.branch,
+        branchCode: installment.branchCode,
+        collectionDay: installment.collectionDay,
+        weekNumber: installment.weekNumber,
+        monthYear: installment.monthYear,
+        note: `CORRECTION: -৳${deduction}. Reason: ${reason || 'No reason provided'}. Original Installment: ${installmentId}`,
+        createdBy: req.user.id
+      });
+      console.log(`✅ Created CORRECTION CollectionHistory record: -৳${deduction} for installment ${installmentId}`);
+    } catch (historyError) {
+      console.error('❌ Error creating correction CollectionHistory:', historyError);
+    }
+
+    console.log(`✅ Installment corrected: ${installmentId} | Deducted ৳${deduction} | New paidAmount: ৳${newPaidAmount} | New status: ${newStatus}`);
+
+    // Re-populate installment
+    await installment.populate('member', 'name phone branch branchCode totalSavings totalPaid');
+    await installment.populate('collector', 'name email');
+
+    return res.status(200).json({
+      success: true,
+      message: `Correction applied: ৳${deduction} deducted successfully`,
+      data: {
+        installment,
+        deductedAmount: deduction,
+        newPaidAmount,
+        newRemainingAmount,
+        newStatus,
+        member: {
+          _id: member._id,
+          name: member.name,
+          totalPaid: member.totalPaid || 0
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Installment correction error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while applying correction',
+      error: error.message
+    });
+  }
+});
+
 // @desc    Update installment (for corrections)
 // @route   PUT /api/installments/:id
 // @access  Private (Admin/Manager only)

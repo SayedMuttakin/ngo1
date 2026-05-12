@@ -21,11 +21,10 @@ const collectionHistorySchema = new mongoose.Schema({
         ref: 'User',
         required: true
     },
-    // Amount collected in THIS specific transaction
+    // Amount collected in THIS specific transaction (negative for corrections)
     collectionAmount: {
         type: Number,
-        required: true,
-        min: [0, 'Collection amount cannot be negative']
+        required: true
     },
     // Date when this collection was made
     collectionDate: {
@@ -42,14 +41,13 @@ const collectionHistorySchema = new mongoose.Schema({
     // Payment method used
     paymentMethod: {
         type: String,
-        enum: ['cash', 'mobile_banking', 'bank_transfer', 'savings_deduction', 'savings_withdrawal'],
+        enum: ['cash', 'mobile_banking', 'bank_transfer', 'savings_deduction', 'savings_withdrawal', 'correction'],
         default: 'cash'
     },
     // Outstanding loan balance AFTER this collection
     outstandingAfterCollection: {
         type: Number,
-        required: true,
-        min: [0, 'Outstanding cannot be negative']
+        required: true
     },
     // Installment details at time of collection
     installmentTarget: {
@@ -58,8 +56,7 @@ const collectionHistorySchema = new mongoose.Schema({
     },
     installmentDue: {
         type: Number,
-        required: true,
-        min: [0, 'Due cannot be negative']
+        required: true
     },
     // Distribution/Product loan grouping
     distributionId: {

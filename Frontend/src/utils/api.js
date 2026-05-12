@@ -327,6 +327,12 @@ export const installmentsAPI = {
   recalculateDueDates: (memberId, collectorId) => apiRequest(`/installments/recalculate-due-dates/${memberId}`, {
     method: 'POST',
     body: { collectorId }
+  }),
+
+  // Apply correction/deduction to a collected installment
+  correct: (correctionData) => apiRequest('/installments/correct', {
+    method: 'POST',
+    body: correctionData
   })
 };
 
