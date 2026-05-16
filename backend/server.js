@@ -17,11 +17,16 @@ app.use(cors({
   exposedHeaders: ['Content-Type', 'Content-Length', 'Cache-Control', 'Pragma', 'Expires']
 }));
 
-// Security middleware (after CORS)
-app.use(helmet({
-  crossOriginResourcePolicy: false,
-  crossOriginOpenerPolicy: false
-}));
+// Security middleware (after CORS) - safe config
+try {
+  app.use(helmet({
+    crossOriginResourcePolicy: false,
+    crossOriginOpenerPolicy: false
+  }));
+} catch (e) {
+  console.log('⚠️ Helmet advanced config not supported, using defaults');
+  app.use(helmet());
+}
 
 // Rate limiting
 const limiter = rateLimit({

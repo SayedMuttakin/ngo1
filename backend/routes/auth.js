@@ -82,11 +82,31 @@ router.post('/register', validateRegister, async (req, res) => {
 // @desc    Login user
 // @route   POST /api/auth/login
 // @access  Public
-router.post('/login', validateLogin, async (req, res) => {
+router.post('/login', async (req, res) => {
   try {
+    // Debug: log what we received
+    console.log('🔐 Login attempt - Body keys:', Object.keys(req.body || {}));
+    console.log('🔐 Login attempt - identifier:', req.body?.identifier, 'email:', req.body?.email);
+
     // Accept both 'identifier' and 'email' field names
     const identifier = req.body.identifier || req.body.email;
-    const { password } = req.body;
+    const password = req.body.password;
+
+    // Basic validation
+    if (!identifier) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email or phone number is required'
+      });
+    }
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password is required'
+      });
+    }
+
+    console.log('🔐 Looking up user:', identifier);
 
     // Find user by email or phone
     const user = await User.findByEmailOrPhone(identifier);
