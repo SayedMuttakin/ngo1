@@ -70,7 +70,7 @@ const validateLogin = [
     .withMessage('Email or phone number is required')
     .custom((value) => {
       // Check if it's email or phone
-      const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
       const phoneRegex = /^01[3-9]\d{8}$/;
 
       if (!emailRegex.test(value) && !phoneRegex.test(value)) {
