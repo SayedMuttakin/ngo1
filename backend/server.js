@@ -8,25 +8,28 @@ require('dotenv').config();
 
 const app = express();
 
-// Security middleware
-app.use(helmet());
-
-// Rate limiting (increased for development)
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // increased limit for development
-  message: 'Too many requests from this IP, please try again later.'
-});
-app.use(limiter);
-
-// CORS configuration
+// CORS configuration (must be before helmet)
 app.use(cors({
-  origin: '*', // Allow all origins for development
-  credentials: false, // Set to false when using wildcard origin
+  origin: '*', // Allow all origins
+  credentials: false,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'Pragma', 'Expires'],
   exposedHeaders: ['Content-Type', 'Content-Length', 'Cache-Control', 'Pragma', 'Expires']
 }));
+
+// Security middleware (after CORS)
+app.use(helmet({
+  crossOriginResourcePolicy: false,
+  crossOriginOpenerPolicy: false
+}));
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1000,
+  message: 'Too many requests from this IP, please try again later.'
+});
+app.use(limiter);
 
 // Body parser middleware
 app.use(express.json({ limit: '10mb' }));
