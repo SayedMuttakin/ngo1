@@ -8,6 +8,8 @@ require('dotenv').config();
 
 const app = express();
 
+// Trust proxy (required when behind nginx reverse proxy)
+app.set('trust proxy', 1);
 // CORS configuration (must be before helmet)
 app.use(cors({
   origin: '*', // Allow all origins
