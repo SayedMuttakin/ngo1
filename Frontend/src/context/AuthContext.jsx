@@ -148,9 +148,14 @@ export const AuthProvider = ({ children }) => {
             requiresApproval: true
           };
         }
+        // Extract validation errors if present
+        let errorMessage = data.message || 'Login failed';
+        if (data.errors && data.errors.length > 0) {
+          errorMessage = data.errors[0].message || errorMessage;
+        }
         return {
           success: false,
-          error: data.message || 'Login failed'
+          error: errorMessage
         };
       }
     } catch (error) {

@@ -84,7 +84,9 @@ router.post('/register', validateRegister, async (req, res) => {
 // @access  Public
 router.post('/login', validateLogin, async (req, res) => {
   try {
-    const { identifier, password } = req.body;
+    // Accept both 'identifier' and 'email' field names
+    const identifier = req.body.identifier || req.body.email;
+    const { password } = req.body;
 
     // Find user by email or phone
     const user = await User.findByEmailOrPhone(identifier);

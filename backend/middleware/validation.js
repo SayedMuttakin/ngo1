@@ -65,9 +65,17 @@ const validateRegister = [
 
 // Login validation rules
 const validateLogin = [
+  // Normalize: accept both 'identifier' and 'email' field names
+  (req, res, next) => {
+    if (!req.body.identifier && req.body.email) {
+      req.body.identifier = req.body.email;
+    }
+    next();
+  },
+
   body('identifier')
     .notEmpty()
-    .withMessage('Email or phone number is required')
+    .withMessage('Phone or Email is required')
     .custom((value) => {
       // Check if it's email or phone
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
