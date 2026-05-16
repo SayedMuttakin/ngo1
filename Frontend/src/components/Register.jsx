@@ -48,7 +48,7 @@ const Register = () => {
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) {
-      toast.error('App is already installed or installation is not available.');
+      toast.error('Installation prompt not ready. If recently uninstalled, please clear browser cache or use "Add to Home Screen" from your browser menu.', { duration: 6000 });
       return;
     }
 
