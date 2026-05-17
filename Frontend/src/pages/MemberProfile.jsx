@@ -503,7 +503,8 @@ const MemberProfile = () => {
                 const rawData = window.rawLoanData || [];
                 const allRawInstallments = rawData.filter(inst =>
                   inst.distributionId?.toString() === selectedLoan &&
-                  inst.note?.includes('Product Loan:')
+                  inst.note?.includes('Product Loan:') &&
+                  inst.status !== 'correction' // ✅ EXCLUDE correction records from total loan amount calculation
                 );
                 const totalLoanAmount = allRawInstallments.reduce((sum, inst) => sum + (inst.amount || 0), 0);
                 let currentOutstanding = totalLoanAmount;
