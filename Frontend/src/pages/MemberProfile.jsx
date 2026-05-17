@@ -543,14 +543,20 @@ const MemberProfile = () => {
                 const collectionHistoryData = window.collectionHistoryData || [];
 
                 // Filter collection history for this product - EXCLUDE product sale & savings records
+                // ✅ INCLUDE correction records too
                 const productCollectionHistory = collectionHistoryData.filter(history => {
                   // Must match the selected product
                   if (history.distributionId !== selectedLoan) return false;
 
-                  // ✅ EXCLUDE: Product Sale initialization records (these are NOT loan payments)
+                  // ✅ INCLUDE: Correction records (negative amount, paymentMethod === 'correction')
+                  if (history.paymentMethod === 'correction' || (history.note && history.note.startsWith('CORRECTION:'))) {
+                    return true;
+                  }
+
+                  // ✅ EXCLUDE: Product Sale initialization records
                   if (history.note && history.note.includes('Product Sale:')) return false;
 
-                  // ✅ EXCLUDE: Savings collections (these go in savings section, not loan history)
+                  // ✅ EXCLUDE: Savings collections
                   if (history.note && history.note.includes('Savings Collection')) return false;
                   if (history.note && history.note.includes('Savings Withdrawal')) return false;
 
@@ -565,36 +571,61 @@ const MemberProfile = () => {
                   productCollectionHistory
                     .sort((a, b) => new Date(a.collectionDate) - new Date(b.collectionDate))
                     .forEach((history, index) => {
+                      const isCorrection = history.paymentMethod === 'correction' || (history.note && history.note.startsWith('CORRECTION:'));
                       const date = new Date(history.collectionDate);
                       const dateStr = date.toLocaleDateString('en-GB');
                       const target = history.installmentTarget || 0;
-                      const collection = history.collectionAmount || 0;
+                      const collection = history.collectionAmount || 0; // negative for correction
                       const due = history.installmentDue || 0;
                       const outstanding = history.outstandingAfterCollection || 0;
 
-                      const bgColor = (index + 1) % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                      const bgColor = isCorrection ? 'bg-red-50' : ((index + 1) % 2 === 0 ? 'bg-white' : 'bg-gray-50');
                       const fieldOfficer = history.collector?.name || 'N/A';
 
-                      console.log(`📊 Collection #${index + 1}: Date=${dateStr}, Collection=৳${collection}, Outstanding=৳${outstanding}`);
+                      // Extract correction reason from note
+                      const correctionReasonMatch = history.note?.match(/Reason: (.+?)(?:\.|$)/);
+                      const correctionReason = correctionReasonMatch ? correctionReasonMatch[1] : '';
 
-                      loanRows.push(
-                        <tr key={`collection-${history._id || index}`} className={`${bgColor} hover:bg-blue-50 transition-colors`}>
-                          <td className="px-3 py-3 text-sm text-gray-700 border border-gray-800">{dateStr}</td>
-                          <td className="px-3 py-3 text-sm text-right font-medium text-gray-900 border border-gray-800">
-                            ৳{target.toLocaleString()}
-                          </td>
-                          <td className="px-3 py-3 text-sm text-right font-semibold text-green-600 border border-gray-800">
-                            ৳{collection.toLocaleString()}
-                          </td>
-                          <td className="px-3 py-3 text-sm text-right font-medium text-orange-600 border border-gray-800">
-                            {due > 0 ? `৳${due.toLocaleString()}` : '-'}
-                          </td>
-                          <td className="px-3 py-3 text-sm text-right font-semibold text-purple-600 border border-gray-800">
-                            ৳{outstanding.toLocaleString()}
-                          </td>
-                          <td className="px-3 py-3 text-sm text-gray-700 border border-gray-800">{fieldOfficer}</td>
-                        </tr>
-                      );
+                      console.log(`📊 Collection #${index + 1}: Date=${dateStr}, Collection=৳${collection}, Outstanding=৳${outstanding}, isCorrection=${isCorrection}`);
+
+                      if (isCorrection) {
+                        // Render correction row with red styling
+                        loanRows.push(
+                          <tr key={`correction-${history._id || index}`} className="bg-red-50 hover:bg-red-100 transition-colors">
+                            <td className="px-3 py-3 text-sm text-red-700 font-medium border border-gray-800">{dateStr}</td>
+                            <td className="px-3 py-3 text-sm text-right font-medium text-gray-400 border border-gray-800">-</td>
+                            <td className="px-3 py-3 text-sm text-right font-bold text-red-600 border border-gray-800">
+                              🔻 ৳{Math.abs(collection).toLocaleString()}
+                            </td>
+                            <td className="px-3 py-3 text-sm text-right font-medium text-gray-400 border border-gray-800">-</td>
+                            <td className="px-3 py-3 text-sm text-right font-semibold text-purple-600 border border-gray-800">
+                              ৳{outstanding.toLocaleString()}
+                            </td>
+                            <td className="px-3 py-3 text-sm text-red-600 border border-gray-800">
+                              ⚡ Correction{correctionReason ? ` (${correctionReason})` : ''}
+                            </td>
+                          </tr>
+                        );
+                      } else {
+                        loanRows.push(
+                          <tr key={`collection-${history._id || index}`} className={`${bgColor} hover:bg-blue-50 transition-colors`}>
+                            <td className="px-3 py-3 text-sm text-gray-700 border border-gray-800">{dateStr}</td>
+                            <td className="px-3 py-3 text-sm text-right font-medium text-gray-900 border border-gray-800">
+                              ৳{target.toLocaleString()}
+                            </td>
+                            <td className="px-3 py-3 text-sm text-right font-semibold text-green-600 border border-gray-800">
+                              ৳{collection.toLocaleString()}
+                            </td>
+                            <td className="px-3 py-3 text-sm text-right font-medium text-orange-600 border border-gray-800">
+                              {due > 0 ? `৳${due.toLocaleString()}` : '-'}
+                            </td>
+                            <td className="px-3 py-3 text-sm text-right font-semibold text-purple-600 border border-gray-800">
+                              ৳{outstanding.toLocaleString()}
+                            </td>
+                            <td className="px-3 py-3 text-sm text-gray-700 border border-gray-800">{fieldOfficer}</td>
+                          </tr>
+                        );
+                      }
                     });
                 } else {
                   // Fallback: Use old method if no collection history available (older data)

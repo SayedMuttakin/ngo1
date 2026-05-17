@@ -2325,6 +2325,24 @@ router.post('/correct', protect, async (req, res) => {
     // Create a NEGATIVE CollectionHistory record for audit trail
     const correctionReceiptNumber = `CORR-${Date.now()}`;
     try {
+      // Calculate TOTAL outstanding for this loan (distributionId) after correction
+      let totalLoanOutstanding = newRemainingAmount; // Start with this installment's new remaining
+      if (installment.distributionId) {
+        const allLoanInstallments = await Installment.find({
+          distributionId: installment.distributionId,
+          isActive: true,
+          status: { $ne: 'correction' }
+        });
+        // Sum all remaining amounts (using updated value for current installment)
+        totalLoanOutstanding = allLoanInstallments.reduce((sum, inst) => {
+          if (inst._id.toString() === installment._id.toString()) {
+            return sum + newRemainingAmount; // Use new value for corrected installment
+          }
+          return sum + (parseFloat(inst.remainingAmount) || 0);
+        }, 0);
+      }
+      console.log(`💰 Total loan outstanding after correction: ৳${totalLoanOutstanding}`);
+
       await CollectionHistory.create({
         installment: installment._id,
         member: memberId,
@@ -2333,7 +2351,7 @@ router.post('/correct', protect, async (req, res) => {
         collectionDate: new Date(),
         receiptNumber: correctionReceiptNumber,
         paymentMethod: 'correction',
-        outstandingAfterCollection: newRemainingAmount,
+        outstandingAfterCollection: totalLoanOutstanding, // Total loan outstanding
         installmentTarget: installment.amount,
         installmentDue: newRemainingAmount,
         distributionId: installment.distributionId || null,

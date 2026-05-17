@@ -188,15 +188,14 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
       const response = await installmentsAPI.getByMember(selectedMember._id);
 
       if (response.success && response.data) {
-        // Filter for actual loan installments created by product sales
-        // CRITICAL: Backend creates installments with type 'regular' and note 'Product Loan'
-        // ✅ ALSO include correction records (status='correction') which are negative-amount deductions
+        // ✅ STEP 1: Separate correction records FIRST — they must NOT be processed as regular installments
+        const correctionRecords = response.data.filter(record => record.status === 'correction');
+        console.log(`🔻 Found ${correctionRecords.length} correction record(s)`);
+
+        // Filter for actual loan installments (exclude corrections — handled separately)
         const loanInstallments = response.data.filter(record => {
-          // ✅ Always include correction records so they appear in loan history
-          if (record.status === 'correction') {
-            console.log(`🔻 Including correction record: -৳${Math.abs(record.amount)}, Note: ${record.note?.substring(0, 60)}`);
-            return true;
-          }
+          // ❌ NEVER include correction records in the main loan list
+          if (record.status === 'correction') return false;
 
           const isLoanType = (record.installmentType === 'regular' && record.note && record.note.includes('Product Loan')) ||
             record.installmentType === 'loan';
@@ -210,14 +209,10 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
           }
 
           // CRITICAL: Filter out duplicate collection records that were created during partial payment completions
-          // These are 'collected' status records where the collected amount is LESS than the original installment amount
-          // This happens when backend creates a new 'collected' record for the remaining partial amount
           if (record.status === 'collected' && record.note) {
             const installmentAmtMatch = record.note.match(/InstallmentAmt: ৳(\d+)/);
             if (installmentAmtMatch) {
               const noteInstallmentAmt = parseInt(installmentAmtMatch[1]);
-              // If this is a collected record but amount < InstallmentAmt, it's a duplicate partial completion record
-              // Skip it to avoid showing the same installment twice
               if (record.amount < noteInstallmentAmt) {
                 console.log(`⚠️ Skipping duplicate partial completion record: Amount ৳${record.amount} < InstallmentAmt ৳${noteInstallmentAmt}`);
                 return false;
@@ -613,7 +608,34 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
           });
 
           console.log(`📊 Active installments: ${activeInstallments.length}, Completed sales: ${completedSales.length}`);
-          setMemberInstallments(activeInstallments);
+
+          // ✅ STEP 2: Format and append correction records at the END of the active list
+          const formattedCorrectionRows = correctionRecords.map((rec, idx) => ({
+            id: `correction-${rec._id}-${idx}`,
+            serialNumber: `C${idx + 1}`,
+            productName: (() => {
+              const match = rec.note?.match(/CORRECTION: Product Loan: (.+?) -/);
+              return match ? match[1].trim() : 'Correction';
+            })(),
+            installmentNumber: null,
+            totalInstallments: null,
+            installmentType: 'correction',
+            dueDate: rec.collectionDate
+              ? new Date(rec.collectionDate).toISOString().split('T')[0]
+              : new Date().toISOString().split('T')[0],
+            amount: rec.amount,         // negative value e.g. -500
+            paidAmount: rec.paidAmount,
+            remainingAmount: 0,
+            status: 'correction',
+            note: rec.note,
+            collectionDate: rec.collectionDate,
+            distributionId: rec.distributionId,
+            originalInstallment: rec
+          }));
+
+          const finalInstallments = [...activeInstallments, ...formattedCorrectionRows];
+
+          setMemberInstallments(finalInstallments);
           setCompletedProductSales(completedSales);
           setAllInstallmentRecords(response.data); // Store all raw data for savings calculation
         } else {
