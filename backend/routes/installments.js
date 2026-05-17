@@ -2325,21 +2325,26 @@ router.post('/correct', protect, async (req, res) => {
     // Create a NEGATIVE CollectionHistory record for audit trail
     const correctionReceiptNumber = `CORR-${Date.now()}`;
     try {
-      // Calculate TOTAL outstanding for this loan (distributionId) after correction
-      let totalLoanOutstanding = newRemainingAmount; // Start with this installment's new remaining
+      // Calculate TOTAL outstanding for this loan after correction
+      // Strategy: get the LAST CollectionHistory for this distribution, then ADD the deduction
+      // (correction reverses a payment, so outstanding increases by deduction amount)
+      let totalLoanOutstanding = newRemainingAmount;
       if (installment.distributionId) {
-        const allLoanInstallments = await Installment.find({
+        const lastHistory = await CollectionHistory.findOne({
           distributionId: installment.distributionId,
           isActive: true,
-          status: { $ne: 'correction' }
-        });
-        // Sum all remaining amounts (using updated value for current installment)
-        totalLoanOutstanding = allLoanInstallments.reduce((sum, inst) => {
-          if (inst._id.toString() === installment._id.toString()) {
-            return sum + newRemainingAmount; // Use new value for corrected installment
-          }
-          return sum + (parseFloat(inst.remainingAmount) || 0);
-        }, 0);
+          paymentMethod: { $ne: 'correction' }
+        }).sort({ collectionDate: -1 });
+
+        if (lastHistory && lastHistory.outstandingAfterCollection != null) {
+          totalLoanOutstanding = (parseFloat(lastHistory.outstandingAfterCollection) || 0) + deduction;
+          console.log(`💰 Previous outstanding: ৳${lastHistory.outstandingAfterCollection} + deduction ৳${deduction} = ৳${totalLoanOutstanding}`);
+        } else {
+          // Fallback: use the original total loan amount minus what's been paid
+          const origTotal = installment.amount * (installment.totalInDistribution || 1);
+          totalLoanOutstanding = origTotal - ((member.totalPaid || 0) - deduction);
+          console.log(`💰 Fallback outstanding calculation: ৳${totalLoanOutstanding}`);
+        }
       }
       console.log(`💰 Total loan outstanding after correction: ৳${totalLoanOutstanding}`);
 

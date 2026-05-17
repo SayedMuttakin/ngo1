@@ -384,33 +384,10 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
 
               // CRITICAL FALLBACK: Check if there are collection records for this installment
               // This handles cases where backend doesn't update paidAmount/remainingAmount properly
-              const installmentCollections = response.data.filter(record => {
-                if (record.installmentType !== 'regular' || !record.note) return false;
-
-                // Check if this collection is for this installment by ID
-                return record.note.includes(`ID: ${installment._id}`);
-              });
-
-              if (installmentCollections.length > 0) {
-                console.log(`   🔍 Found ${installmentCollections.length} collection records for this installment`);
-
-                // Log each collection record for debugging
-                installmentCollections.forEach((rec, idx) => {
-                  console.log(`      Record ${idx + 1}: Amount ৳${rec.amount}, Date: ${rec.date || rec.createdAt}`);
-                });
-
-                // Calculate actual total collected from records
-                const actualCollected = installmentCollections.reduce((sum, rec) => sum + (rec.amount || 0), 0);
-                const actualRemaining = Math.max(0, installment.amount - actualCollected);
-
-                console.log(`   💰 Total installment amount: ৳${installment.amount}`);
-                console.log(`   💰 Actual collected from records: ৳${actualCollected}`);
-                console.log(`   💰 Actual remaining: ৳${actualRemaining}`);
-
-                // Override backend values with calculated values
-                totalCollected = actualCollected;
-                remainingAmount = actualRemaining;
-              }
+              // ✅ Trust backend paidAmount/remainingAmount directly
+              // These are always correctly updated by the backend for both normal collections AND corrections
+              // We do NOT recalculate from collection records to avoid picking up correction records
+              // which have negative amounts and would incorrectly increase remainingAmount
 
               // Determine status based ONLY on remaining amount (ignore backend status)
               // This ensures validation persists until full amount is cleared
