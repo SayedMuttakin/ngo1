@@ -440,8 +440,11 @@ export const productsAPI = {
     return apiRequest(`/products/sales/report${queryString ? `?${queryString}` : ''}`);
   },
 
-  // Get today's product activity report
-  getTodayReport: () => apiRequest('/products/today/report')
+  // Get today's product activity report (optionally by date)
+  getTodayReport: (date = null) => {
+    const params = date ? `?date=${date}` : '';
+    return apiRequest(`/products/today/report${params}`);
+  }
 };
 
 // Distributions API functions

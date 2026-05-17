@@ -13,7 +13,8 @@ import {
   TrendingUp,
   Building2,
   CheckCircle2,
-  Clock
+  Clock,
+  ArrowUpFromLine
 } from 'lucide-react';
 
 const formatCurrency = (amount) => {
@@ -37,6 +38,7 @@ export default function DailyCollectionReport() {
     return now.toISOString().split('T')[0];
   });
   const [report, setReport] = useState(null);
+  const [savingsOut, setSavingsOut] = useState([]);
   const [loading, setLoading] = useState(false);
   const [collectorsLoading, setCollectorsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -64,12 +66,15 @@ export default function DailyCollectionReport() {
       setLoading(true);
       setError('');
       setReport(null);
-      const res = await collectorsAPI.getDailyReport(collectorId, date);
-      if (res.success) {
-        setReport(res.data);
-      } else {
-        setError(res.message || 'Failed to load report.');
-      }
+      setSavingsOut([]);
+      // Fetch both report and savings-out in parallel
+      const [repRes, savRes] = await Promise.all([
+        collectorsAPI.getDailyReport(collectorId, date),
+        collectorsAPI.getTodaysSavingsOut(collectorId, date)
+      ]);
+      if (repRes.success) setReport(repRes.data);
+      else setError(repRes.message || 'Failed to load report.');
+      if (savRes.success) setSavingsOut(savRes.data?.withdrawals || []);
     } catch (e) {
       setError('Failed to load report. Please try again.');
     } finally {
@@ -203,7 +208,7 @@ export default function DailyCollectionReport() {
       {/* Summary Cards */}
       {report && !loading && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-5">
               <div className="flex items-center space-x-3">
                 <div className="bg-blue-100 rounded-xl p-2.5">
@@ -236,6 +241,20 @@ export default function DailyCollectionReport() {
                 <div>
                   <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Savings Collected</p>
                   <p className="text-xl font-bold text-emerald-600">{formatCurrency(report.summary.totalSavingsCollection)}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-lg border border-orange-100 p-5">
+              <div className="flex items-center space-x-3">
+                <div className="bg-orange-100 rounded-xl p-2.5">
+                  <ArrowUpFromLine className="h-5 w-5 text-orange-500" />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Savings Out</p>
+                  <p className="text-xl font-bold text-orange-600">
+                    {formatCurrency(savingsOut.reduce((s, r) => s + (r.amount || 0), 0))}
+                  </p>
                 </div>
               </div>
             </div>
@@ -316,34 +335,46 @@ export default function DailyCollectionReport() {
                           <th className="px-4 py-3 text-left font-semibold text-gray-600">Code</th>
                           <th className="px-4 py-3 text-left font-semibold text-gray-600">Phone</th>
                           <th className="px-4 py-3 text-right font-semibold text-gray-600">Installment (৳)</th>
-                          <th className="px-4 py-3 text-right font-semibold text-gray-600">Savings (৳)</th>
+                          <th className="px-4 py-3 text-right font-semibold text-gray-600">Savings In (৳)</th>
+                          <th className="px-4 py-3 text-right font-semibold text-orange-600">Savings Out (৳)</th>
                           <th className="px-4 py-3 text-right font-semibold text-gray-600">Total (৳)</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {group.members.map((m, i) => (
-                          <tr key={m.memberId} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-4 py-3 text-gray-500 font-medium">{m.serial}</td>
-                            <td className="px-4 py-3">
-                              <div className="font-semibold text-gray-900">{m.memberName}</div>
-                            </td>
-                            <td className="px-4 py-3 text-gray-600 font-mono text-xs">{m.memberCode || '—'}</td>
-                            <td className="px-4 py-3 text-gray-500 text-xs">{m.phone || '—'}</td>
-                            <td className="px-4 py-3 text-right">
-                              <span className={`font-semibold ${m.loanAmount > 0 ? 'text-red-600' : 'text-gray-400'}`}>
-                                {m.loanAmount > 0 ? formatCurrency(m.loanAmount) : '—'}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              <span className={`font-semibold ${m.savingsAmount > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
-                                {m.savingsAmount > 0 ? formatCurrency(m.savingsAmount) : '—'}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-right font-bold text-violet-700">
-                              {formatCurrency(m.totalCollected)}
-                            </td>
-                          </tr>
-                        ))}
+                        {group.members.map((m) => {
+                            // Find savings-out for this member on this date
+                            const memberSavOut = savingsOut
+                              .filter(r => r.memberId === m.memberId)
+                              .reduce((s, r) => s + (r.amount || 0), 0);
+                            return (
+                            <tr key={m.memberId} className="hover:bg-gray-50 transition-colors">
+                              <td className="px-4 py-3 text-gray-500 font-medium">{m.serial}</td>
+                              <td className="px-4 py-3">
+                                <div className="font-semibold text-gray-900">{m.memberName}</div>
+                              </td>
+                              <td className="px-4 py-3 text-gray-600 font-mono text-xs">{m.memberCode || '—'}</td>
+                              <td className="px-4 py-3 text-gray-500 text-xs">{m.phone || '—'}</td>
+                              <td className="px-4 py-3 text-right">
+                                <span className={`font-semibold ${m.loanAmount > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                                  {m.loanAmount > 0 ? formatCurrency(m.loanAmount) : '—'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                <span className={`font-semibold ${m.savingsAmount > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                                  {m.savingsAmount > 0 ? formatCurrency(m.savingsAmount) : '—'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                <span className={`font-semibold ${memberSavOut > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
+                                  {memberSavOut > 0 ? formatCurrency(memberSavOut) : '—'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-right font-bold text-violet-700">
+                                {formatCurrency(m.totalCollected)}
+                              </td>
+                            </tr>
+                          );
+                        })}
                         {/* Branch subtotal */}
                         <tr className="bg-violet-50 border-t border-violet-100">
                           <td colSpan={4} className="px-4 py-2 text-sm font-bold text-violet-800">
@@ -354,6 +385,13 @@ export default function DailyCollectionReport() {
                           </td>
                           <td className="px-4 py-2 text-right font-bold text-emerald-600">
                             {formatCurrency(group.members.reduce((s, m) => s + m.savingsAmount, 0))}
+                          </td>
+                          <td className="px-4 py-2 text-right font-bold text-orange-500">
+                            {formatCurrency(
+                              savingsOut
+                                .filter(r => group.members.some(m => m.memberId === r.memberId))
+                                .reduce((s, r) => s + (r.amount || 0), 0)
+                            )}
                           </td>
                           <td className="px-4 py-2 text-right font-bold text-violet-800">
                             {formatCurrency(group.members.reduce((s, m) => s + m.totalCollected, 0))}
@@ -373,8 +411,12 @@ export default function DailyCollectionReport() {
                       <p className="font-bold text-red-600">{formatCurrency(filteredMembers.reduce((s, m) => s + m.loanAmount, 0))}</p>
                     </div>
                     <div className="text-center">
-                      <p className="text-xs text-gray-500 font-medium">Savings</p>
+                      <p className="text-xs text-gray-500 font-medium">Savings In</p>
                       <p className="font-bold text-emerald-600">{formatCurrency(filteredMembers.reduce((s, m) => s + m.savingsAmount, 0))}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-orange-500 font-medium">Savings Out</p>
+                      <p className="font-bold text-orange-600">{formatCurrency(savingsOut.reduce((s, r) => s + (r.amount || 0), 0))}</p>
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-gray-500 font-medium">Total</p>

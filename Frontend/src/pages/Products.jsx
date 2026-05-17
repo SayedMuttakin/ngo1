@@ -7,23 +7,30 @@ import toast from 'react-hot-toast';
 
 // ─── Today's Report Modal ───────────────────────────────────────────────────
 const TodayReportModal = ({ onClose }) => {
+  const getTodayStr = () => {
+    const now = new Date();
+    now.setHours(now.getHours() + 6);
+    return now.toISOString().split('T')[0];
+  };
+  const [selectedDate, setSelectedDate] = useState(getTodayStr);
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchReport = async () => {
-      try {
-        const res = await productsAPI.getTodayReport();
-        if (res.success) setReport(res.data);
-        else toast.error('Failed to load report');
-      } catch {
-        toast.error('Server connection error');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchReport();
-  }, []);
+  const fetchReport = async (date) => {
+    setLoading(true);
+    setReport(null);
+    try {
+      const res = await productsAPI.getTodayReport(date);
+      if (res.success) setReport(res.data);
+      else toast.error('Failed to load report');
+    } catch {
+      toast.error('Server connection error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchReport(selectedDate); }, [selectedDate]);
 
   const fmt = (n) => (n || 0).toLocaleString('en-BD');
 
@@ -35,11 +42,21 @@ const TodayReportModal = ({ onClose }) => {
           <div className="flex items-center gap-3">
             <div className="bg-white/20 rounded-xl p-2"><BarChart2 className="h-6 w-6" /></div>
             <div>
-              <h2 className="text-xl font-bold">Today's Report</h2>
-              <p className="text-sm text-white/80">{report?.date || '...'}</p>
+              <h2 className="text-xl font-bold">Product Report</h2>
+              <p className="text-sm text-white/80">{report?.date || selectedDate}</p>
             </div>
           </div>
-          <button onClick={onClose} className="bg-white/20 hover:bg-white/30 rounded-xl p-2 transition-all"><X className="h-5 w-5" /></button>
+          <div className="flex items-center gap-3">
+            {/* Date Picker */}
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value)}
+              className="bg-white/20 border border-white/30 rounded-xl px-3 py-1.5 text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50 cursor-pointer"
+              style={{ colorScheme: 'dark' }}
+            />
+            <button onClick={onClose} className="bg-white/20 hover:bg-white/30 rounded-xl p-2 transition-all"><X className="h-5 w-5" /></button>
+          </div>
         </div>
 
         <div className="overflow-y-auto flex-1 p-6 space-y-6">

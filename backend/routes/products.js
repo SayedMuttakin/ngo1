@@ -596,21 +596,32 @@ router.get('/sales/report', protect, async (req, res) => {
 // @access  Private
 router.get('/today/report', protect, async (req, res) => {
   try {
-    const now = new Date();
-    // Bangladesh timezone offset = UTC+6
-    const bdOffset = 6 * 60 * 60 * 1000;
-    // Get today's date in BD timezone
-    const bdNow = new Date(now.getTime() + bdOffset);
-    const bdYear = bdNow.getUTCFullYear();
-    const bdMonth = bdNow.getUTCMonth();
-    const bdDay = bdNow.getUTCDate();
+    const { date } = req.query;
+    
+    let bdYear, bdMonth, bdDay;
+    if (date) {
+      // Expecting 'YYYY-MM-DD'
+      const parts = date.split('-');
+      bdYear = parseInt(parts[0], 10);
+      bdMonth = parseInt(parts[1], 10) - 1;
+      bdDay = parseInt(parts[2], 10);
+    } else {
+      const now = new Date();
+      // Bangladesh timezone offset = UTC+6
+      const bdOffset = 6 * 60 * 60 * 1000;
+      // Get today's date in BD timezone
+      const bdNow = new Date(now.getTime() + bdOffset);
+      bdYear = bdNow.getUTCFullYear();
+      bdMonth = bdNow.getUTCMonth();
+      bdDay = bdNow.getUTCDate();
+    }
 
-    // Today's start in UTC = BD midnight = UTC prev day 18:00
+    // Target date start in UTC = BD midnight = UTC prev day 18:00
     const todayStart = new Date(Date.UTC(bdYear, bdMonth, bdDay - 1, 18, 0, 0, 0));
-    // Today's end in UTC = BD midnight next day - 1ms = UTC today 17:59:59
+    // Target date end in UTC = BD midnight next day - 1ms = UTC today 17:59:59
     const todayEnd = new Date(Date.UTC(bdYear, bdMonth, bdDay, 17, 59, 59, 999));
 
-    console.log('📅 Today Report - BD Date:', `${bdYear}-${bdMonth + 1}-${bdDay}`);
+    console.log('📅 Product Report - BD Date:', `${bdYear}-${bdMonth + 1}-${bdDay}`);
     console.log('   UTC Range:', todayStart.toISOString(), 'to', todayEnd.toISOString());
 
     // 1. Products added today
