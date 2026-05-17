@@ -35,6 +35,43 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
       });
     }
 
+    // 🔻 Correction Record - Special display, read-only, no action buttons
+    if (installment.status === 'correction') {
+      const correctionNote = installment.note || '';
+      const reasonMatch = correctionNote.match(/Reason: (.+?)(?:\.|$)/);
+      const correctionReason = reasonMatch ? reasonMatch[1] : 'No reason provided';
+      const deductedAmount = Math.abs(installment.amount);
+      const dateStr = installment.collectionDate
+        ? new Date(installment.collectionDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Dhaka' })
+        : installment.dueDate || '—';
+
+      return (
+        <div className="rounded-xl border-2 border-red-300 bg-red-50 p-4 transition-all duration-300">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex items-center space-x-3">
+              <span className="text-2xl">🔻</span>
+              <div className="bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-lg px-3 py-1">
+                <span className="text-sm font-bold">CORRECTION</span>
+              </div>
+              <div>
+                <p className="text-red-800 font-bold text-base">
+                  -{'\u09F3'}{deductedAmount.toLocaleString()} Deducted
+                </p>
+                <p className="text-red-600 text-xs mt-0.5">
+                  📅 {dateStr} • Reason: {correctionReason}
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="inline-block bg-red-100 text-red-800 border border-red-300 px-3 py-1 rounded-lg text-xs font-bold">
+                CORRECTION
+              </span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div
         className={`rounded-xl border p-4 transition-all duration-300 hover:shadow-lg ${getStatusColor(installment.status)}`}
@@ -114,6 +151,7 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
     );
   };
 
+
   // Load member installments on component mount and when schedule changes
   useEffect(() => {
     loadMemberInstallments();
@@ -152,7 +190,14 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
       if (response.success && response.data) {
         // Filter for actual loan installments created by product sales
         // CRITICAL: Backend creates installments with type 'regular' and note 'Product Loan'
+        // ✅ ALSO include correction records (status='correction') which are negative-amount deductions
         const loanInstallments = response.data.filter(record => {
+          // ✅ Always include correction records so they appear in loan history
+          if (record.status === 'correction') {
+            console.log(`🔻 Including correction record: -৳${Math.abs(record.amount)}, Note: ${record.note?.substring(0, 60)}`);
+            return true;
+          }
+
           const isLoanType = (record.installmentType === 'regular' && record.note && record.note.includes('Product Loan')) ||
             record.installmentType === 'loan';
 
@@ -596,6 +641,8 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
       case 'partial': return 'bg-orange-50 text-orange-800 border-orange-200';
       case 'upcoming': return 'bg-blue-50 text-blue-800 border-blue-200';
       case 'paid': return 'bg-green-50 text-green-800 border-green-200';
+      case 'collected': return 'bg-green-50 text-green-800 border-green-200';
+      case 'correction': return 'bg-red-50 text-red-800 border-red-300';
       default: return 'bg-gray-50 text-gray-800 border-gray-200';
     }
   };
@@ -607,6 +654,8 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
       case 'partial': return '⚠️';
       case 'upcoming': return '📅';
       case 'paid': return '✅';
+      case 'collected': return '✅';
+      case 'correction': return '🔻';
       default: return '📋';
     }
   };

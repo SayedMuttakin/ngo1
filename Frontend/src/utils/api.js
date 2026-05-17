@@ -1,6 +1,11 @@
 // API utility functions for making authenticated requests
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// Automatically determine API base URL based on environment
+const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const defaultApiUrl = isLocalhost ? 'http://localhost:5000/api' : '/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL !== 'undefined' 
+  ? import.meta.env.VITE_API_URL 
+  : defaultApiUrl;
 
 // Helper function to get auth token
 const getAuthToken = () => {

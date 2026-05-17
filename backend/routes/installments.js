@@ -2350,7 +2350,40 @@ router.post('/correct', protect, async (req, res) => {
       console.error('❌ Error creating correction CollectionHistory:', historyError);
     }
 
+    // ✅ NEW: Create a separate Installment record for correction (shows in loan history as a row)
+    try {
+      const correctionNote = `CORRECTION: Product Loan: ${installment.note?.match(/Product Loan: (.+?) -/)?.[1] || 'Product'} - Deducted ৳${deduction}. Reason: ${reason || 'No reason'}. ID: ${installment._id}`;
+      await Installment.create({
+        member: memberId,
+        collector: req.user.id,
+        amount: -deduction,            // Negative amount shows as deduction
+        paidAmount: -deduction,
+        remainingAmount: 0,
+        installmentType: 'regular',    // Keep as regular so it appears alongside loan history
+        status: 'correction',
+        paymentMethod: 'correction',
+        collectionDate: new Date(),
+        collectionDay: installment.collectionDay,
+        weekNumber: Math.ceil(new Date().getDate() / 7),
+        monthYear: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
+        dueDate: new Date(),
+        note: correctionNote,
+        receiptNumber: correctionReceiptNumber,
+        branchCode: installment.branchCode,
+        branch: installment.branch,
+        distributionId: installment.distributionId,
+        serialNumber: installment.serialNumber,
+        isActive: true,
+        createdBy: req.user.id,
+        originalInstallmentId: installment._id  // Reference to original installment
+      });
+      console.log(`✅ Created CORRECTION Installment row: -৳${deduction} linked to installment ${installmentId}`);
+    } catch (correctionRowError) {
+      console.error('❌ Error creating correction Installment row:', correctionRowError);
+    }
+
     console.log(`✅ Installment corrected: ${installmentId} | Deducted ৳${deduction} | New paidAmount: ৳${newPaidAmount} | New status: ${newStatus}`);
+
 
     // Re-populate installment
     await installment.populate('member', 'name phone branch branchCode totalSavings totalPaid');

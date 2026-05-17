@@ -118,7 +118,7 @@ server {
 
     # Frontend
     location / {
-        root /root/ngo1/frontend;
+        root /root/ngo1/frontend/dist;
         try_files $uri $uri/ /index.html;
         index index.html;
     }

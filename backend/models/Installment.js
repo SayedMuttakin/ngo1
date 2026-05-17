@@ -13,28 +13,25 @@ const installmentSchema = new mongoose.Schema({
   },
   amount: {
     type: Number,
-    required: [true, 'Amount is required'],
-    min: [0, 'Amount cannot be negative']
+    required: [true, 'Amount is required']
+    // Note: corrections use negative amounts, so no min:0 constraint
   },
   paidAmount: {
     type: Number,
-    default: 0,
-    min: [0, 'Paid amount cannot be negative']
+    default: 0
   },
   lastPaymentAmount: {
     type: Number,
-    default: 0,
-    min: [0, 'Last payment amount cannot be negative']
+    default: 0
   },
   outstandingAtCollection: {
     type: Number,
-    default: null,
-    min: [0, 'Outstanding at collection cannot be negative']
+    default: null
   },
   remainingAmount: {
     type: Number,
-    default: function () { return this.amount; },
-    min: [0, 'Remaining amount cannot be negative']
+    default: function () { return this.amount; }
+    // Note: corrections can have negative amounts
   },
   installmentType: {
     type: String,
@@ -43,7 +40,7 @@ const installmentSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ['cash', 'mobile_banking', 'bank_transfer', 'savings_deduction', 'savings_withdrawal'],
+    enum: ['cash', 'mobile_banking', 'bank_transfer', 'savings_deduction', 'savings_withdrawal', 'correction'],
     default: 'cash'
   },
   collectionDate: {
@@ -78,11 +75,11 @@ const installmentSchema = new mongoose.Schema({
   note: {
     type: String,
     trim: true,
-    maxlength: [200, 'Note cannot be more than 200 characters']
+    maxlength: [500, 'Note cannot be more than 500 characters']
   },
   status: {
     type: String,
-    enum: ['collected', 'pending', 'partial', 'missed', 'cancelled'],
+    enum: ['collected', 'pending', 'partial', 'missed', 'cancelled', 'correction'],
     default: 'collected'
   },
   receiptNumber: {
