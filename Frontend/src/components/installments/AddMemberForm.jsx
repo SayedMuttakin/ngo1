@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import { membersAPI } from '../../utils/api';
 import { getCurrentBDDate } from '../../utils/dateUtils';
+import { compressImage } from '../../utils/imageUtils';
 
 const AddMemberForm = ({ selectedBranch, selectedCollector, onClose, onMemberAdded, editingMember = null }) => {
   const [formData, setFormData] = useState({
@@ -143,7 +144,7 @@ const AddMemberForm = ({ selectedBranch, selectedCollector, onClose, onMemberAdd
     }));
   };
 
-  const handleImageChange = (e) => {
+  const handleImageChange = async (e) => {
     const file = e.target.files[0];
     if (file) {
       // Validate file type
@@ -152,17 +153,25 @@ const AddMemberForm = ({ selectedBranch, selectedCollector, onClose, onMemberAdd
         return;
       }
 
-      // No size limit on image, backend compresses it using sharp
-      console.log('Image size:', file.size);
+      const loadingToast = toast.loading('Processing and optimizing image...');
+      try {
+        const compressedFile = await compressImage(file);
+        toast.dismiss(loadingToast);
 
-      setSelectedImage(file);
+        setSelectedImage(compressedFile);
 
-      // Create preview
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setImagePreview(e.target.result);
-      };
-      reader.readAsDataURL(file);
+        // Create preview
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setImagePreview(e.target.result);
+        };
+        reader.readAsDataURL(compressedFile);
+        toast.success('Image optimized successfully!');
+      } catch (error) {
+        toast.dismiss(loadingToast);
+        console.error('❌ Compression error:', error);
+        toast.error('Failed to process image');
+      }
     }
   };
 

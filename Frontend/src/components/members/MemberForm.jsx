@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, User, Phone, Calendar, CreditCard, MapPin, Camera, Building2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { membersAPI, branchesAPI } from '../../utils/api';
+import { compressImage } from '../../utils/imageUtils';
 
 const MemberForm = ({ member, onSave, onCancel, branches }) => {
   // Auto-fill branch information if branches prop is provided (from installment collection)
@@ -273,7 +274,7 @@ const MemberForm = ({ member, onSave, onCancel, branches }) => {
     }
   };
 
-  const handleImageChange = (e) => {
+  const handleImageChange = async (e) => {
     const file = e.target.files[0];
     console.log('📸 File selected:', file);
 
@@ -284,30 +285,37 @@ const MemberForm = ({ member, onSave, onCancel, branches }) => {
         type: file.type
       });
 
-      // No size limit on image, backend compresses it using sharp
-      console.log('Image size:', file.size);
+      const loadingToast = toast.loading('Processing and optimizing image...');
+      try {
+        const compressedFile = await compressImage(file);
+        toast.dismiss(loadingToast);
 
-      // Reset image error state
-      setImageError(false);
+        // Reset image error state
+        setImageError(false);
 
-      // Store the actual file object AND create preview
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64String = event.target.result;
-        console.log('✅ Image preview created');
-        // Store both file and preview
-        setFormData({
-          ...formData,
-          profileImage: base64String, // For preview
-          profileImageFile: file // For upload
-        });
-        toast.success('Image uploaded successfully!');
-      };
-      reader.onerror = (error) => {
-        console.error('❌ FileReader error:', error);
-        toast.error('Failed to read image file');
-      };
-      reader.readAsDataURL(file);
+        // Store the actual file object AND create preview
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const base64String = event.target.result;
+          console.log('✅ Image preview created');
+          // Store both file and preview
+          setFormData({
+            ...formData,
+            profileImage: base64String, // For preview
+            profileImageFile: compressedFile // For upload
+          });
+          toast.success('Image optimized successfully!');
+        };
+        reader.onerror = (error) => {
+          console.error('❌ FileReader error:', error);
+          toast.error('Failed to read image file');
+        };
+        reader.readAsDataURL(compressedFile);
+      } catch (error) {
+        toast.dismiss(loadingToast);
+        console.error('❌ Compression error:', error);
+        toast.error('Failed to process image');
+      }
     }
   };
 
