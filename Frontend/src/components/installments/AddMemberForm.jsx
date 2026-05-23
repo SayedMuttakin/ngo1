@@ -152,11 +152,8 @@ const AddMemberForm = ({ selectedBranch, selectedCollector, onClose, onMemberAdd
         return;
       }
 
-      // Validate file size (5MB limit)
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('Image size must be less than 5MB');
-        return;
-      }
+      // No size limit on image, backend compresses it using sharp
+      console.log('Image size:', file.size);
 
       setSelectedImage(file);
 
@@ -504,7 +501,7 @@ const AddMemberForm = ({ selectedBranch, selectedCollector, onClose, onMemberAdd
                 </div>
 
                 <p className="text-xs text-gray-500">
-                  JPG, PNG, GIF up to 5MB
+                  JPG, PNG, GIF
                 </p>
               </div>
             </div>

@@ -284,11 +284,8 @@ const MemberForm = ({ member, onSave, onCancel, branches }) => {
         type: file.type
       });
 
-      // Check file size (limit to 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('Image size should be less than 5MB');
-        return;
-      }
+      // No size limit on image, backend compresses it using sharp
+      console.log('Image size:', file.size);
 
       // Reset image error state
       setImageError(false);
@@ -411,7 +408,7 @@ const MemberForm = ({ member, onSave, onCancel, branches }) => {
                   </div>
                   <div className="text-xs text-gray-600 space-y-1">
                     <p className="flex items-center gap-1">
-                      <span className="text-blue-600">✓</span> JPG, PNG, GIF up to 5MB
+                      <span className="text-blue-600">✓</span> JPG, PNG, GIF
                     </p>
                     <p className="flex items-center gap-1">
                       <span className="text-blue-600">✓</span> Passport size recommended
