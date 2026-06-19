@@ -212,6 +212,8 @@ router.post('/verify-pin', protect, authorize('admin', 'manager'), async (req, r
             message: 'Failed to verify PIN'
         });
     }
+});
+
 // @desc    Export database backup as JSON
 // @route   GET /api/admin/database/backup
 // @access  Private/Admin
