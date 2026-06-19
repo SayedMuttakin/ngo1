@@ -91,9 +91,9 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
                   Due: {installment.dueDate} • ({installment.installmentNumber}/{installment.totalInstallments})
                 </p>
               </div>
-              {installment.paidAmount > 0 && !installment.isAutoApplied && (
+              {installment.paidAmount > 0 && (
                 <p className="text-green-600 font-semibold text-xs md:text-sm">
-                  Paid: ৳{installment.originalInstallment?.lastPaymentAmount || installment.paidAmount}
+                  Paid: ৳{installment.paidAmount}
                 </p>
               )}
             </div>
@@ -101,6 +101,7 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
 
           <div className="flex items-center justify-between md:justify-end space-x-4 w-full md:w-auto">
             <div className="text-left md:text-right">
+              <p className="text-xs text-gray-500 font-semibold mb-0.5">Remaining Due</p>
               <p className="text-xl font-bold text-gray-800">৳{installment.remainingAmount}</p>
               <div className={`inline-block px-3 py-1 rounded-lg text-xs font-bold ${getStatusColor(installment.status)}`}>
                 {installment.status.toUpperCase()}
@@ -1206,7 +1207,7 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
             <div className="space-y-4">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-gray-800">
-                  {showHistory ? `${completedProductSales.length} Completed Sales` : `${memberInstallments.length} Installments`}
+                  {showHistory ? `${completedProductSales.length} Completed Sales` : `${memberInstallments.filter(inst => inst.status !== 'correction' && inst.installmentType !== 'correction').length} Installments`}
                 </h3>
                 <div className="flex items-center space-x-2">
                   {completedProductSales.length > 0 && (
@@ -1356,15 +1357,26 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
                   const singleTypeInstallments = installmentsByAmount[singleType];
 
                   // Renumber for consistent display
-                  const renumberedInstallments = singleTypeInstallments.map((installment, index) => ({
-                    ...installment,
-                    serialNumber: index + 1,
-                    installmentNumber: index + 1,
-                    totalInstallments: singleTypeInstallments.length
-                  }));
+                  const nonCorrectionCount = singleTypeInstallments.filter(inst => inst.status !== 'correction' && inst.installmentType !== 'correction').length;
+                  let activeIndex = 0;
+                  const renumberedInstallments = singleTypeInstallments.map((installment) => {
+                    if (installment.status === 'correction' || installment.installmentType === 'correction') {
+                      return installment;
+                    }
+                    const updated = {
+                      ...installment,
+                      serialNumber: activeIndex + 1,
+                      installmentNumber: activeIndex + 1,
+                      totalInstallments: nonCorrectionCount
+                    };
+                    activeIndex++;
+                    return updated;
+                  });
 
                   // Calculate totals
-                  const total = singleTypeInstallments.reduce((sum, inst) => sum + inst.amount, 0);
+                  const total = singleTypeInstallments
+                    .filter(inst => inst.status !== 'correction' && inst.installmentType !== 'correction')
+                    .reduce((sum, inst) => sum + inst.amount, 0);
                   // ✅ FIX: Count only collected/partial installments with actual paidAmount
                   // Auto-applied overpayments should not be double-counted
                   // Only count paidAmount from installments that have collectionDate (actual collections)
@@ -1464,7 +1476,7 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
                           </div>
                         </div>
                         <p className="text-sm text-blue-600">
-                          {renumberedInstallments.length} installments • ৳{renumberedInstallments[0]?.amount || 0} each
+                          {renumberedInstallments.filter(inst => inst.status !== 'correction' && inst.installmentType !== 'correction').length} installments • ৳{renumberedInstallments.find(inst => inst.status !== 'correction' && inst.installmentType !== 'correction')?.amount || 0} each
                         </p>
                       </div>
                       {renumberedInstallments.map((installment) => (
@@ -1484,7 +1496,9 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
                         const productInstallments = installmentsByAmount[productName];
 
                         // Calculate totals for this product
-                        const total = productInstallments.reduce((sum, inst) => sum + inst.amount, 0);
+                        const total = productInstallments
+                          .filter(inst => inst.status !== 'correction' && inst.installmentType !== 'correction')
+                          .reduce((sum, inst) => sum + inst.amount, 0);
                         // ✅ FIX: Use correct paid calculation (same as single type)
                         const paid = productInstallments.reduce((sum, inst) => {
                           if ((inst.status === 'paid' || inst.status === 'partial' || inst.status === 'collected') && inst.paidAmount > 0) {
@@ -1506,12 +1520,19 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
                         }
 
                         // Renumber installments
-                        const renumberedInstallments = productInstallments.map((inst, idx) => ({
-                          ...inst,
-                          serialNumber: idx + 1,
-                          installmentNumber: idx + 1,
-                          totalInstallments: productInstallments.length
-                        }));
+                        const nonCorrectionCount = productInstallments.filter(inst => inst.status !== 'correction' && inst.installmentType !== 'correction').length;
+                        let activeIndex = 0;
+                        const renumberedInstallments = productInstallments.map((inst) => {
+                          if (inst.status === 'correction' || inst.installmentType === 'correction') return inst;
+                          const updated = {
+                            ...inst,
+                            serialNumber: activeIndex + 1,
+                            installmentNumber: activeIndex + 1,
+                            totalInstallments: nonCorrectionCount
+                          };
+                          activeIndex++;
+                          return updated;
+                        });
 
                         // Calculate savings for this product
                         const savingsRecords = allInstallmentRecords.filter(record => {
@@ -1656,7 +1677,7 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
                                 </div>
                               </div>
                               <p className="text-sm ${color.text}">
-                                {renumberedInstallments.length} installments • ৳{productInstallments[0]?.amount || 0} each
+                                {renumberedInstallments.filter(inst => inst.status !== 'correction' && inst.installmentType !== 'correction').length} installments • ৳{renumberedInstallments.find(inst => inst.status !== 'correction' && inst.installmentType !== 'correction')?.amount || 0} each
                               </p>
                             </div>
                             {renumberedInstallments.map((installment) => (
@@ -1718,33 +1739,40 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
 
                 // DO NOT synchronize dates - keep original dates for each product sale
                 // Renumber BOTH left and right installments for consistent display
-                const leftInstallmentsWithNumbers = leftInstallments.map((installment, index) => {
-                  // Keep the original due date from backend - DO NOT change it
-                  return {
+                const leftNonCorrectionCount = leftInstallments.filter(inst => inst.status !== 'correction' && inst.installmentType !== 'correction').length;
+                let leftActiveIndex = 0;
+                const leftInstallmentsWithNumbers = leftInstallments.map((installment) => {
+                  if (installment.status === 'correction' || installment.installmentType === 'correction') return installment;
+                  const updated = {
                     ...installment,
                     dueDate: installment.dueDate,
-                    serialNumber: index + 1,
-                    installmentNumber: index + 1,
-                    totalInstallments: leftInstallments.length // ✅ Fix: Use group size, not overall total
+                    serialNumber: leftActiveIndex + 1,
+                    installmentNumber: leftActiveIndex + 1,
+                    totalInstallments: leftNonCorrectionCount
                   };
+                  leftActiveIndex++;
+                  return updated;
                 });
 
-                const rightInstallmentsWithNumbers = rightInstallments.map((installment, index) => {
-                  // Keep the original due date from backend - DO NOT change it
-                  // Each product sale should have its own schedule based on when it was sold
-                  return {
+                const rightNonCorrectionCount = rightInstallments.filter(inst => inst.status !== 'correction' && inst.installmentType !== 'correction').length;
+                let rightActiveIndex = 0;
+                const rightInstallmentsWithNumbers = rightInstallments.map((installment) => {
+                  if (installment.status === 'correction' || installment.installmentType === 'correction') return installment;
+                  const updated = {
                     ...installment,
-                    // Keep original dueDate unchanged
                     dueDate: installment.dueDate,
-                    // Only update serial numbers for display
-                    serialNumber: index + 1,
-                    installmentNumber: index + 1,
-                    totalInstallments: rightInstallments.length // ✅ Fix: Use group size, not overall total
+                    serialNumber: rightActiveIndex + 1,
+                    installmentNumber: rightActiveIndex + 1,
+                    totalInstallments: rightNonCorrectionCount
                   };
+                  rightActiveIndex++;
+                  return updated;
                 });
 
                 // Calculate totals for each type
-                const leftTotal = leftInstallments.reduce((sum, inst) => sum + inst.amount, 0);
+                const leftTotal = leftInstallments
+                  .filter(inst => inst.status !== 'correction' && inst.installmentType !== 'correction')
+                  .reduce((sum, inst) => sum + inst.amount, 0);
                 // ✅ FIX: Use correct paid calculation
                 const leftPaid = leftInstallments.reduce((sum, inst) => {
                   if ((inst.status === 'paid' || inst.status === 'partial' || inst.status === 'collected') && inst.paidAmount > 0) {
@@ -1759,7 +1787,9 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
                 // Due: total - paid (can go negative if overpaid, but show 0)
                 const leftDue = Math.max(0, leftTotal - leftPaid);
 
-                const rightTotal = rightInstallments.reduce((sum, inst) => sum + inst.amount, 0);
+                const rightTotal = rightInstallments
+                  .filter(inst => inst.status !== 'correction' && inst.installmentType !== 'correction')
+                  .reduce((sum, inst) => sum + inst.amount, 0);
                 // ✅ FIX: Use correct paid calculation
                 const rightPaid = rightInstallments.reduce((sum, inst) => {
                   if ((inst.status === 'paid' || inst.status === 'partial' || inst.status === 'collected') && inst.paidAmount > 0) {
@@ -1912,7 +1942,7 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
                           </div>
                         </div>
                         <p className="text-sm text-orange-600">
-                          {rightInstallments.length} installments • ৳{rightInstallments[0]?.amount || 0} each
+                          {rightInstallmentsWithNumbers.filter(inst => inst.status !== 'correction' && inst.installmentType !== 'correction').length} installments • ৳{rightInstallmentsWithNumbers.find(inst => inst.status !== 'correction' && inst.installmentType !== 'correction')?.amount || 0} each
                         </p>
                       </div>
                       {rightInstallmentsWithNumbers.map((installment) => (
@@ -1948,7 +1978,7 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
                           </div>
                         </div>
                         <p className="text-sm text-green-600">
-                          {leftInstallmentsWithNumbers.length} installments • ৳{leftInstallmentsWithNumbers[0]?.amount || 0} each
+                          {leftInstallmentsWithNumbers.filter(inst => inst.status !== 'correction' && inst.installmentType !== 'correction').length} installments • ৳{leftInstallmentsWithNumbers.find(inst => inst.status !== 'correction' && inst.installmentType !== 'correction')?.amount || 0} each
                         </p>
                       </div>
                       {leftInstallmentsWithNumbers.map((installment) => (
@@ -1987,7 +2017,7 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
                           </div>
                         </div>
                         <p className="text-sm text-green-600">
-                          {leftInstallmentsWithNumbers.length} installments • ৳{leftInstallmentsWithNumbers[0]?.amount || 0} each
+                          {leftInstallmentsWithNumbers.filter(inst => inst.status !== 'correction' && inst.installmentType !== 'correction').length} installments • ৳{leftInstallmentsWithNumbers.find(inst => inst.status !== 'correction' && inst.installmentType !== 'correction')?.amount || 0} each
                         </p>
                       </div>
                       {leftInstallmentsWithNumbers.map((installment) => (
@@ -2020,7 +2050,7 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
                           </div>
                         </div>
                         <p className="text-sm text-orange-600">
-                          {rightInstallments.length} installments • ৳{rightInstallments[0]?.amount || 0} each
+                          {rightInstallmentsWithNumbers.filter(inst => inst.status !== 'correction' && inst.installmentType !== 'correction').length} installments • ৳{rightInstallmentsWithNumbers.find(inst => inst.status !== 'correction' && inst.installmentType !== 'correction')?.amount || 0} each
                         </p>
                       </div>
                       {rightInstallmentsWithNumbers.map((installment) => (
