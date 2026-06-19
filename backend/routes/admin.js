@@ -212,6 +212,121 @@ router.post('/verify-pin', protect, authorize('admin', 'manager'), async (req, r
             message: 'Failed to verify PIN'
         });
     }
+// @desc    Export database backup as JSON
+// @route   GET /api/admin/database/backup
+// @access  Private/Admin
+router.get('/database/backup', protect, authorize('admin', 'manager'), async (req, res) => {
+    try {
+        console.log('📦 Starting database backup export...');
+        const backupData = {
+            backupVersion: '1.0.0',
+            timestamp: new Date().toISOString(),
+            exportedBy: req.user.name,
+            collections: {}
+        };
+
+        const models = {
+            users: require('../models/User'),
+            members: require('../models/Member'),
+            branches: require('../models/Branch'),
+            products: require('../models/Product'),
+            distributions: require('../models/Distribution'),
+            installments: require('../models/Installment'),
+            collectionhistories: require('../models/CollectionHistory'),
+            collectionschedules: require('../models/CollectionSchedule'),
+            collectorschedules: require('../models/CollectorSchedule'),
+            systemsettings: require('../models/SystemSettings')
+        };
+
+        for (const [key, Model] of Object.entries(models)) {
+            const documents = await Model.find({}).lean();
+            backupData.collections[key] = documents;
+            console.log(`   📂 Exported ${documents.length} documents from ${key}`);
+        }
+
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename=ngo_db_backup_${new Date().toISOString().split('T')[0]}.json`);
+        res.status(200).send(JSON.stringify(backupData, null, 2));
+    } catch (error) {
+        console.error('❌ Database backup export failed:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Database backup failed',
+            error: error.message
+        });
+    }
+});
+
+// @desc    Restore database backup from uploaded JSON file
+// @route   POST /api/admin/database/restore
+// @access  Private/Admin
+router.post('/database/restore', protect, authorize('admin', 'manager'), async (req, res) => {
+    try {
+        console.log('📥 Starting database restore...');
+        const { backupData } = req.body;
+
+        if (!backupData || !backupData.collections) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid backup file format'
+            });
+        }
+
+        const models = {
+            users: require('../models/User'),
+            members: require('../models/Member'),
+            branches: require('../models/Branch'),
+            products: require('../models/Product'),
+            distributions: require('../models/Distribution'),
+            installments: require('../models/Installment'),
+            collectionhistories: require('../models/CollectionHistory'),
+            collectionschedules: require('../models/CollectionSchedule'),
+            collectorschedules: require('../models/CollectorSchedule'),
+            systemsettings: require('../models/SystemSettings')
+        };
+
+        const restoreSummary = {};
+
+        // Loop over each collection and restore
+        for (const [key, Model] of Object.entries(models)) {
+            const docs = backupData.collections[key];
+            if (!Array.isArray(docs)) {
+                console.warn(`⚠️ Collection ${key} data is missing or not an array in backup`);
+                continue;
+            }
+
+            // 1. Delete all existing documents in this collection
+            await Model.deleteMany({});
+            console.log(`   🗑️ Cleared collection: ${key}`);
+
+            // 2. Insert documents if array is not empty
+            if (docs.length > 0) {
+                const docsToInsert = docs.map(doc => {
+                    const cleanDoc = { ...doc };
+                    delete cleanDoc.__v;
+                    return cleanDoc;
+                });
+                await Model.insertMany(docsToInsert);
+                console.log(`   ✅ Restored ${docsToInsert.length} documents into ${key}`);
+                restoreSummary[key] = docsToInsert.length;
+            } else {
+                restoreSummary[key] = 0;
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Database restored successfully',
+            summary: restoreSummary
+        });
+    } catch (error) {
+        console.error('❌ Database restore failed:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Database restore failed',
+            error: error.message
+        });
+    }
 });
 
 module.exports = router;

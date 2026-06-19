@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { Trash2, Edit2, Search, Shield, Users, Building2, UserCog, Lock, KeyRound } from 'lucide-react';
+import { Trash2, Edit2, Search, Shield, Users, Building2, UserCog, Lock, KeyRound, Database, Download, Upload } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import MemberForm from '../components/members/MemberForm';
 
@@ -32,6 +32,7 @@ const AdminControlPanel = () => {
         { id: 'members', name: 'Members', icon: Users },
         { id: 'collectors', name: 'Collectors', icon: UserCog },
         { id: 'branches', name: 'Branches', icon: Building2 },
+        { id: 'database', name: 'Backup & Restore', icon: Database },
     ];
 
     // Check PIN status on mount
@@ -336,6 +337,182 @@ const AdminControlPanel = () => {
                 item.memberCode?.toLowerCase().includes(searchLower)
             );
         });
+    };
+
+    // Database Backup and Restore Handlers
+    const [restoring, setRestoring] = useState(false);
+
+    const handleDownloadBackup = async () => {
+        try {
+            setLoading(true);
+            const token = localStorage.getItem('ngo_token');
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/database/backup`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) {
+                throw new Error('Backup failed');
+            }
+
+            // Trigger file download
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ngo_db_backup_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            toast.success('Database backup downloaded successfully');
+        } catch (error) {
+            console.error('Error downloading backup:', error);
+            toast.error('Failed to download database backup');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleRestoreBackup = async (e) => {
+        e.preventDefault();
+        const fileInput = document.getElementById('backup-file-input');
+        const file = fileInput?.files?.[0];
+
+        if (!file) {
+            toast.error('Please select a backup JSON file first');
+            return;
+        }
+
+        const confirmRestore = window.confirm(
+            "⚠️ CRITICAL WARNING!\n\n" +
+            "Are you sure you want to restore the database?\n" +
+            "This will completely overwrite your current database and replace all data with the contents of the backup file.\n" +
+            "This action cannot be undone."
+        );
+        if (!confirmRestore) return;
+
+        setRestoring(true);
+        const loadingToast = toast.loading('Restoring database... Please do not close this window.');
+
+        try {
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const backupData = JSON.parse(event.target.result);
+                    
+                    if (!backupData.collections) {
+                        throw new Error('Invalid backup file structure. Missing "collections" key.');
+                    }
+
+                    const token = localStorage.getItem('ngo_token');
+                    const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/database/restore`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ backupData })
+                    });
+
+                    const data = await response.json();
+                    toast.dismiss(loadingToast);
+
+                    if (data.success) {
+                        toast.success('Database restored successfully!', { duration: 5000 });
+                        fileInput.value = '';
+                    } else {
+                        toast.error(data.message || 'Restore failed');
+                    }
+                } catch (parseError) {
+                    toast.dismiss(loadingToast);
+                    console.error('Parse error:', parseError);
+                    toast.error('Failed to parse backup JSON file: ' + parseError.message);
+                } finally {
+                    setRestoring(false);
+                }
+            };
+            reader.readAsText(file);
+        } catch (error) {
+            toast.dismiss(loadingToast);
+            console.error('Restore error:', error);
+            toast.error('Restore operation failed');
+            setRestoring(false);
+        }
+    };
+
+    const renderBackupScreen = () => {
+        return (
+            <div className="p-8 space-y-8">
+                {/* Backup Section */}
+                <div className="bg-purple-50 rounded-2xl border border-purple-100 p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div className="flex-1 space-y-2">
+                        <h3 className="text-lg font-bold text-purple-900 flex items-center gap-2">
+                            <Download className="h-5 w-5 text-purple-600" />
+                            Backup Database
+                        </h3>
+                        <p className="text-sm text-purple-700">
+                            Download a complete copy of your MongoDB database (including all members, collectors, branches, sales, and collection histories) to your local computer. This file can be used to restore the system later or migrate to another MongoDB database.
+                        </p>
+                    </div>
+                    <button
+                        onClick={handleDownloadBackup}
+                        disabled={loading}
+                        className="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center gap-2 whitespace-nowrap"
+                    >
+                        <Download className="h-5 w-5" />
+                        {loading ? 'Downloading...' : 'Backup Database Now'}
+                    </button>
+                </div>
+
+                {/* Divider */}
+                <div className="border-t border-gray-100"></div>
+
+                {/* Restore Section */}
+                <div className="bg-red-50 rounded-2xl border border-red-100 p-6 space-y-4">
+                    <div className="space-y-2">
+                        <h3 className="text-lg font-bold text-red-900 flex items-center gap-2">
+                            <Upload className="h-5 w-5 text-red-600" />
+                            Restore Database
+                        </h3>
+                        <p className="text-sm text-red-700">
+                            Restore your database from a previously downloaded JSON backup file. 
+                        </p>
+                        <div className="bg-red-100/50 border border-red-200 rounded-xl p-4 text-xs text-red-800 space-y-1">
+                            <p className="font-bold">⚠️ CRITICAL WARNING:</p>
+                            <p>1. This will permanently delete all current data in your MongoDB database.</p>
+                            <p>2. Do not close this browser window or disconnect internet during the restore process.</p>
+                            <p>3. Make sure to use a valid JSON backup file generated by this system.</p>
+                        </div>
+                    </div>
+
+                    <form onSubmit={handleRestoreBackup} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+                        <div className="flex-1">
+                            <input
+                                id="backup-file-input"
+                                type="file"
+                                accept=".json"
+                                disabled={restoring}
+                                className="w-full text-sm text-gray-500
+                                    file:mr-4 file:py-2.5 file:px-4
+                                    file:rounded-xl file:border-0
+                                    file:text-sm file:font-semibold
+                                    file:bg-red-100 file:text-red-700
+                                    hover:file:bg-red-200
+                                    border border-red-200 rounded-xl p-1 bg-white cursor-pointer"
+                            />
+                        </div>
+                        <button
+                            type="submit"
+                            disabled={restoring}
+                            className="bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white font-semibold px-6 py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 whitespace-nowrap"
+                        >
+                            <Upload className="h-5 w-5" />
+                            {restoring ? 'Restoring...' : 'Restore Database Now'}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        );
     };
 
     // Render table based on active tab
@@ -737,30 +914,32 @@ const AdminControlPanel = () => {
             </div>
 
             {/* Search Bar */}
-            <div className="flex items-center space-x-4">
-                <div className="flex-1 relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Search className="h-5 w-5 text-gray-400" />
+            {activeTab !== 'database' && (
+                <div className="flex items-center space-x-4">
+                    <div className="flex-1 relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Search className="h-5 w-5 text-gray-400" />
+                        </div>
+                        <input
+                            type="text"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            placeholder={`Search ${activeTab}...`}
+                            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        />
                     </div>
-                    <input
-                        type="text"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        placeholder={`Search ${activeTab}...`}
-                        className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    />
+                    <button
+                        onClick={fetchData}
+                        className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    >
+                        Refresh
+                    </button>
                 </div>
-                <button
-                    onClick={fetchData}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                    Refresh
-                </button>
-            </div>
+            )}
 
-            {/* Table */}
+            {/* Content Area */}
             <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-                {renderTable()}
+                {activeTab === 'database' ? renderBackupScreen() : renderTable()}
             </div>
 
             {/* Edit Modal */}
