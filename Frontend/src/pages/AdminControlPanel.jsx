@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import MemberForm from '../components/members/MemberForm';
 
 const AdminControlPanel = () => {
-    const { user } = useAuth();
+    const { user, logout } = useAuth();
     const [activeTab, setActiveTab] = useState('members');
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(false);
@@ -418,8 +418,12 @@ const AdminControlPanel = () => {
                     toast.dismiss(loadingToast);
 
                     if (data.success) {
-                        toast.success('Database restored successfully!', { duration: 5000 });
+                        toast.success('Database restored successfully! Logging out to apply changes...', { duration: 6000 });
                         fileInput.value = '';
+                        setTimeout(() => {
+                            logout();
+                            window.location.href = '/login';
+                        }, 2500);
                     } else {
                         toast.error(data.message || 'Restore failed');
                     }
