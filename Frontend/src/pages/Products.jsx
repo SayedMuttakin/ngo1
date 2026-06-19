@@ -70,11 +70,10 @@ const TodayReportModal = ({ onClose }) => {
           ) : (
             <>
               {/* Summary Cards */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {[
                   { label: 'New Products', value: report.summary.newProductsCount, icon: <PackagePlus className="h-5 w-5" />, color: 'from-blue-500 to-blue-600' },
                   { label: 'Restocked', value: report.summary.restockedCount, icon: <RotateCcw className="h-5 w-5" />, color: 'from-violet-500 to-violet-600' },
-                  { label: 'Total Sales', value: `৳${fmt(report.summary.totalSalesValue)}`, icon: <TrendingUp className="h-5 w-5" />, color: 'from-green-500 to-emerald-600' },
                   { label: 'New Stock Value', value: `৳${fmt(report.summary.totalNewStockValue)}`, icon: <ShoppingBag className="h-5 w-5" />, color: 'from-orange-500 to-red-500' },
                 ].map((s, i) => (
                   <div key={i} className={`bg-gradient-to-br ${s.color} text-white rounded-2xl p-4 shadow-md`}>
@@ -132,58 +131,6 @@ const TodayReportModal = ({ onClose }) => {
                   </div>
                 </section>
               )}
-
-              {/* Today's Sales */}
-              <section>
-                <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2 text-base">
-                  <TrendingUp className="h-5 w-5 text-green-500" /> Today's Sales ({report.sales.totalTransactions} transactions)
-                </h3>
-                {report.sales.totalTransactions === 0 ? (
-                  <p className="text-sm text-gray-400 bg-gray-50 rounded-xl p-4 text-center">No sales today</p>
-                ) : (
-                  <>
-                    {/* By Product Summary */}
-                    <div className="space-y-2 mb-3">
-                      {report.sales.byProduct.map((p, i) => (
-                        <div key={i} className="flex items-center justify-between bg-green-50 border border-green-100 rounded-xl px-4 py-3">
-                          <div>
-                            <p className="font-semibold text-gray-800 text-sm">{p.productName}</p>
-                            <p className="text-xs text-gray-500">{p.transactions} transactions • {p.totalQty} {p.unit}</p>
-                          </div>
-                          <p className="text-base font-bold text-green-700">৳{fmt(p.totalValue)}</p>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Total */}
-                    <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-2xl px-5 py-4 flex items-center justify-between shadow-lg">
-                      <div>
-                        <p className="text-green-100 text-sm">Total Sales Revenue (Today)</p>
-                        <p className="text-xs text-green-200">{report.sales.totalQtySold} products sold</p>
-                      </div>
-                      <p className="text-2xl font-bold">৳{fmt(report.sales.totalSalesValue)}</p>
-                    </div>
-
-                    {/* Transaction Details */}
-                    {report.sales.details.length > 0 && (
-                      <details className="mt-3">
-                        <summary className="cursor-pointer text-sm text-indigo-600 font-semibold hover:text-indigo-800 select-none">View detailed transactions ▼</summary>
-                        <div className="mt-2 space-y-2 max-h-48 overflow-y-auto">
-                          {report.sales.details.map((s, i) => (
-                            <div key={i} className="flex items-center justify-between bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-xs">
-                              <div>
-                                <p className="font-semibold text-gray-700">{s.productName} × {s.quantity} {s.unit}</p>
-                                <p className="text-gray-400">Member: {s.memberName} ({s.memberCode}) • {s.collectorName}</p>
-                              </div>
-                              <p className="font-bold text-gray-800">৳{fmt(s.subtotal)}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                    )}
-                  </>
-                )}
-              </section>
             </>
           )}
         </div>
