@@ -2272,6 +2272,22 @@ router.post('/correct', protect, async (req, res) => {
       });
     }
 
+    // Prevent double submission / duplicate correction records (within 5 seconds)
+    const CollectionHistory = require('../models/CollectionHistory');
+    const recentCorrection = await CollectionHistory.findOne({
+      installment: installmentId,
+      collectionAmount: -deduction,
+      paymentMethod: 'correction',
+      collectionDate: { $gte: new Date(Date.now() - 5000) }
+    });
+    if (recentCorrection) {
+      console.log('⚠️ Duplicate correction request detected and blocked.');
+      return res.status(400).json({
+        success: false,
+        message: 'Duplicate correction request detected.'
+      });
+    }
+
     const currentPaid = parseFloat(installment.paidAmount) || 0;
     if (deduction > currentPaid) {
       return res.status(400).json({
@@ -2352,7 +2368,7 @@ router.post('/correct', protect, async (req, res) => {
       await CollectionHistory.create({
         installment: installment._id,
         member: memberId,
-        collector: req.user.id,
+        collector: installment.collector || req.user.id,
         collectionAmount: -deduction, // Negative amount = correction
         collectionDate: new Date(),
         receiptNumber: correctionReceiptNumber,
@@ -2379,7 +2395,7 @@ router.post('/correct', protect, async (req, res) => {
       const correctionNote = `CORRECTION: Product Loan: ${installment.note?.match(/Product Loan: (.+?) -/)?.[1] || 'Product'} - Deducted ৳${deduction}. Reason: ${reason || 'No reason'}. ID: ${installment._id}`;
       await Installment.create({
         member: memberId,
-        collector: req.user.id,
+        collector: installment.collector || req.user.id,
         amount: -deduction,            // Negative amount shows as deduction
         paidAmount: -deduction,
         remainingAmount: 0,

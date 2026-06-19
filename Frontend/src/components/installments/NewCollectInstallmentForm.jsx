@@ -1038,6 +1038,7 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
   };
 
   const handleApplyCorrection = async () => {
+    if (isSubmitting) return; // Prevent duplicate submissions
     const amount = parseFloat(correctionAmount);
     if (!correctionInstallment) return;
 
