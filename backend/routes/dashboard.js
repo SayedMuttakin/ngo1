@@ -1126,172 +1126,91 @@ router.get('/overview', protect, async (req, res) => {
     // 1. Get total members count
     const totalMembers = await Member.countDocuments(memberFilter);
 
-    // 2. ✅ OPTIMIZED: Get total savings & monthly collections in ONE query
-    const combinedAgg = await Installment.aggregate([
-      {
-        $match: {
-          ...installmentFilter,
-          status: { $in: ['collected', 'partial'] },
-          collectionDate: { $gte: monthStart, $lte: monthEnd }
+    // 2. Get total savings & monthly collection from CollectionHistory (single source of truth)
+    const CollectionHistory = require('../models/CollectionHistory');
+
+    const monthlyHistoryFilter = {
+      isActive: true,
+      collectionDate: { $gte: monthStart, $lte: monthEnd }
+    };
+    if (req.user.role === 'collector') {
+      monthlyHistoryFilter.collector = req.user.id;
+    } else {
+      monthlyHistoryFilter.member = { $in: activeMemberIds };
+    }
+
+    const monthlyHistory = await CollectionHistory.find(monthlyHistoryFilter).lean();
+
+    let savingsDeposits = 0;
+    let savingsWithdrawals = 0;
+    let monthlyTotalCollection = 0;
+
+    monthlyHistory.forEach(h => {
+      const noteLower = (h.note || '').toLowerCase();
+
+      // Check if it's savings withdrawal
+      if (noteLower.includes('savings withdrawal') || noteLower.includes('withdrawal') || h.paymentMethod === 'savings_withdrawal') {
+        savingsWithdrawals += (h.collectionAmount || 0);
+      } else if (noteLower.includes('initial savings') || noteLower.includes('savings collection') || noteLower.includes('savings')) {
+        savingsDeposits += (h.collectionAmount || 0);
+      } else {
+        // Exclude product sale disbursements (when loan is given out)
+        if (noteLower.includes('product sale:') && noteLower.includes('saleid:')) {
+          return;
         }
-      },
-      {
-        $group: {
-          _id: null,
-          savingsDeposits: {
-            $sum: {
-              $cond: [
-                {
-                  $and: [
-                    { $ne: ['$note', null] },
-                    { $regexMatch: { input: '$note', regex: '(Initial Savings|Savings Collection)', options: 'i' } },
-                    { $not: { $regexMatch: { input: '$note', regex: 'Withdrawal', options: 'i' } } }
-                  ]
-                },
-                {
-                  $cond: [
-                    { $eq: ['$status', 'partial'] },
-                    { $ifNull: ['$paidAmount', 0] },
-                    '$amount'
-                  ]
-                },
-                0
-              ]
-            }
-          },
-          savingsWithdrawals: {
-            $sum: {
-              $cond: [
-                {
-                  $and: [
-                    { $ne: ['$note', null] },
-                    { $regexMatch: { input: '$note', regex: 'Savings Withdrawal', options: 'i' } }
-                  ]
-                },
-                {
-                  $cond: [
-                    { $eq: ['$status', 'partial'] },
-                    { $ifNull: ['$paidAmount', 0] },
-                    '$amount'
-                  ]
-                },
-                0
-              ]
-            }
-          }
-        }
+        // Count ONLY loan installments (corrections are negative, so they subtract)
+        monthlyTotalCollection += (h.collectionAmount || 0);
       }
-    ]);
+    });
 
-    const aggregated = combinedAgg[0] || { savingsDeposits: 0, savingsWithdrawals: 0 };
-    // ✅ Calculate NET savings (deposits - withdrawals) to properly reflect withdrawals
-    const totalSavingsCollected = (aggregated.savingsDeposits || 0) - (aggregated.savingsWithdrawals || 0);
+    const totalSavingsCollected = savingsDeposits - savingsWithdrawals;
 
-    console.log(`💰 Savings Breakdown (${selectedMonth + 1}/${selectedYear}):`);
-    console.log(`   - Savings Deposits: ৳${aggregated.savingsDeposits || 0}`);
-    console.log(`   - Savings Withdrawals: ৳${aggregated.savingsWithdrawals || 0}`);
-    console.log(`   - Net Savings (Deposits - Withdrawals): ৳${totalSavingsCollected}`);
+    console.log(`💰 Savings Breakdown (${selectedMonth + 1}/${selectedYear}) using CollectionHistory:`);
+    console.log(`   - Savings Deposits: ৳${savingsDeposits}`);
+    console.log(`   - Savings Withdrawals: ৳${savingsWithdrawals}`);
+    console.log(`   - Net Savings: ৳${totalSavingsCollected}`);
 
-    // 3. Get today's total LOAN collection (excluding savings)
+    // 3. Get today's total LOAN collection and today's SAVINGS collection
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
-    today.setHours(0, 0, 0, 0);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // ✅ Get today's collections and filter for loan installments only
-    const todayCollectionsRaw = await Installment.find({
-      ...installmentFilter,
-      status: { $in: ['collected', 'partial'] },
-      collectionDate: { $gte: today, $lte: tomorrow }
-    }).select('amount paidAmount status note').lean();
+    const todayHistoryFilter = {
+      isActive: true,
+      collectionDate: { $gte: today, $lt: tomorrow }
+    };
+    if (req.user.role === 'collector') {
+      todayHistoryFilter.collector = req.user.id;
+    } else {
+      todayHistoryFilter.member = { $in: activeMemberIds };
+    }
+
+    const todayHistory = await CollectionHistory.find(todayHistoryFilter).lean();
 
     let todayCollection = 0;
-    todayCollectionsRaw.forEach(inst => {
-      const noteLower = (inst.note || '').toLowerCase();
-
-      // Skip savings collections (including initial savings)
-      if (noteLower.includes('initial savings') || noteLower.includes('savings collection') || noteLower.includes('savings withdrawal')) {
-        return;
-      }
-
-      // Skip product sales
-      if (noteLower.includes('product sale:') && noteLower.includes('saleid:')) {
-        return;
-      }
-
-      // Count only loan installments
-      if (inst.status === 'collected' || inst.status === 'paid') {
-        todayCollection += inst.amount;
-      } else if (inst.status === 'partial') {
-        todayCollection += (inst.paidAmount || 0);
-      }
-    });
-
-    // 3a. ✅ Get today's SAVINGS collection
-    const todaySavingsCollectionsRaw = await Installment.find({
-      ...installmentFilter,
-      status: { $in: ['collected', 'partial'] },
-      collectionDate: { $gte: today, $lte: tomorrow }
-    }).select('amount paidAmount status note').lean();
-
     let todaySavings = 0;
-    todaySavingsCollectionsRaw.forEach(inst => {
-      const noteLower = (inst.note || '').toLowerCase();
 
-      // Only count savings collections (including initial savings, but not withdrawals)
-      if ((noteLower.includes('initial savings') || noteLower.includes('savings collection')) && !noteLower.includes('savings withdrawal')) {
-        if (inst.status === 'collected' || inst.status === 'paid') {
-          todaySavings += inst.amount;
-        } else if (inst.status === 'partial') {
-          todaySavings += (inst.paidAmount || 0);
+    todayHistory.forEach(h => {
+      const noteLower = (h.note || '').toLowerCase();
+
+      if (noteLower.includes('savings withdrawal') || noteLower.includes('withdrawal') || h.paymentMethod === 'savings_withdrawal') {
+        // Skip savings withdrawal for today collections (shown as savings out)
+        return;
+      } else if (noteLower.includes('initial savings') || noteLower.includes('savings collection') || noteLower.includes('savings')) {
+        todaySavings += (h.collectionAmount || 0);
+      } else {
+        // Skip product sale disbursements
+        if (noteLower.includes('product sale:') && noteLower.includes('saleid:')) {
+          return;
         }
+        // Count only loan installments (corrections are negative, so they subtract)
+        todayCollection += (h.collectionAmount || 0);
       }
     });
 
-    // 3b. ✅ Get monthly LOAN collection (EXCLUDING SAVINGS)
-    console.log('\n📊 ========== CALCULATING MONTHLY COLLECTION ==========');
-    console.log(`📅 Month: ${selectedMonth + 1}/${selectedYear}`);
-
-    // ✅ Get all collections and process efficiently
-    const monthlyCollections = await Installment.find({
-      ...installmentFilter,
-      status: { $in: ['collected', 'partial'] },
-      collectionDate: { $gte: monthStart, $lte: monthEnd }
-    }).select('amount paidAmount status note').lean(); // Use .lean() for read-only data
-
-    // Sum LOAN collections ONLY - Exclude savings, product sales, and withdrawals
-    let monthlyTotalCollection = 0;
-    let savingsCount = 0;
-    let skippedCount = 0;
-
-    monthlyCollections.forEach(inst => {
-      const noteLower = (inst.note || '').toLowerCase();
-
-      // Skip product sale disbursements (when loan is given out)
-      if (noteLower.includes('product sale:') && noteLower.includes('saleid:')) {
-        skippedCount++;
-        return;
-      }
-
-      // Skip savings collections (including initial savings)
-      if (noteLower.includes('initial savings') || noteLower.includes('savings collection') || noteLower.includes('savings withdrawal')) {
-        savingsCount++;
-        return;
-      }
-
-      // Count ONLY loan installments
-      if (inst.status === 'collected' || inst.status === 'paid') {
-        monthlyTotalCollection += inst.amount;
-      } else if (inst.status === 'partial') {
-        monthlyTotalCollection += (inst.paidAmount || 0);
-      }
-    });
-
+    console.log(`📊 Today's Loan Collection: ৳${todayCollection}, Today's Savings: ৳${todaySavings}`);
     console.log(`📊 Monthly Loan Collection (EXCLUDING SAVINGS): ৳${monthlyTotalCollection}`);
-    console.log(`   (Skipped ${skippedCount} product disbursements)`);
-    console.log(`   (Skipped ${savingsCount} savings transactions)`);
-    console.log(`========================================\n`);
 
     // 3c. Calculate Total Outstanding Loans (Net Balance)
     // ✅ NEW APPROACH: Sum of all collectors' Net Balance
