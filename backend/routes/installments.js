@@ -1531,7 +1531,9 @@ router.post('/collect', protect, validateInstallmentCollection, async (req, res)
             isActive: true
           });
 
-          const totalLoan = allInstsForDist.reduce((sum, inst) => sum + (inst.amount || 0), 0);
+          const totalLoan = allInstsForDist
+            .filter(inst => inst.status !== 'correction' && inst.installmentType !== 'correction')
+            .reduce((sum, inst) => sum + (inst.amount || 0), 0);
 
           // Calculate total paid BEFORE this new transaction
           const totalPaidBefore = allInstsForDist.reduce((sum, inst) => {
@@ -2332,9 +2334,8 @@ router.post('/correct', protect, async (req, res) => {
       if (installment.distributionId) {
         const lastHistory = await CollectionHistory.findOne({
           distributionId: installment.distributionId,
-          isActive: true,
-          paymentMethod: { $ne: 'correction' }
-        }).sort({ collectionDate: -1 });
+          isActive: true
+        }).sort({ collectionDate: -1, _id: -1 });
 
         if (lastHistory && lastHistory.outstandingAfterCollection != null) {
           totalLoanOutstanding = (parseFloat(lastHistory.outstandingAfterCollection) || 0) + deduction;

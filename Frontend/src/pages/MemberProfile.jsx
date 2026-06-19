@@ -578,7 +578,10 @@ const MemberProfile = () => {
                       const target = history.installmentTarget || 0;
                       const collection = history.collectionAmount || 0; // negative for correction
                       const due = history.installmentDue || 0;
-                      const outstanding = history.outstandingAfterCollection || 0;
+                      
+                      // Calculate running outstanding balance dynamically to ensure correct math
+                      currentOutstanding -= collection;
+                      const outstanding = Math.max(0, currentOutstanding);
 
                       const bgColor = isCorrection ? 'bg-red-50' : ((index + 1) % 2 === 0 ? 'bg-white' : 'bg-gray-50');
                       const fieldOfficer = history.collector?.name || 'N/A';
