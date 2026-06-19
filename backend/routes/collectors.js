@@ -820,8 +820,8 @@ router.get('/:id/daily-report', protect, async (req, res) => {
       // Skip savings-withdrawal (savings going OUT, not a collection-in)
       if (hist.paymentMethod === 'savings_withdrawal') return;
 
-      // Skip negative correction records
-      if ((hist.collectionAmount || 0) <= 0) return;
+      // Skip zero amount collections (but allow negative corrections to reduce totals)
+      if ((hist.collectionAmount || 0) === 0) return;
 
       const histNote = hist.note || '';
 

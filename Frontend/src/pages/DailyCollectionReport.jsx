@@ -19,6 +19,9 @@ import {
 
 const formatCurrency = (amount) => {
   const num = Number(amount) || 0;
+  if (num < 0) {
+    return `-৳${Math.abs(num).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  }
   return `৳${num.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 };
 
@@ -355,13 +358,13 @@ export default function DailyCollectionReport() {
                               <td className="px-4 py-3 text-gray-600 font-mono text-xs">{m.memberCode || '—'}</td>
                               <td className="px-4 py-3 text-gray-500 text-xs">{m.phone || '—'}</td>
                               <td className="px-4 py-3 text-right">
-                                <span className={`font-semibold ${m.loanAmount > 0 ? 'text-red-600' : 'text-gray-400'}`}>
-                                  {m.loanAmount > 0 ? formatCurrency(m.loanAmount) : '—'}
+                                <span className={`font-semibold ${m.loanAmount !== 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                                  {m.loanAmount !== 0 ? formatCurrency(m.loanAmount) : '—'}
                                 </span>
                               </td>
                               <td className="px-4 py-3 text-right">
-                                <span className={`font-semibold ${m.savingsAmount > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
-                                  {m.savingsAmount > 0 ? formatCurrency(m.savingsAmount) : '—'}
+                                <span className={`font-semibold ${m.savingsAmount !== 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                                  {m.savingsAmount !== 0 ? formatCurrency(m.savingsAmount) : '—'}
                                 </span>
                               </td>
                               <td className="px-4 py-3 text-right">

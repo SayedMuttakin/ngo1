@@ -324,8 +324,35 @@ router.post('/', protect, uploadProfileImage, compressImage, handleUploadError, 
         createdBy: req.user.id
       };
 
-      await Installment.create(initialSavingsData);
+      const installment = await Installment.create(initialSavingsData);
       console.log(`💰 Created initial savings record: ৳${parsedSavings} for collector ${savingsCollector}`);
+
+      // Create a corresponding CollectionHistory record so it shows up in daily reports and dashboards
+      try {
+        const CollectionHistory = require('../models/CollectionHistory');
+        await CollectionHistory.create({
+          installment: installment._id,
+          member: member._id,
+          collector: savingsCollector,
+          collectionAmount: parsedSavings,
+          collectionDate: currentDate,
+          receiptNumber: `INIT-SAV-${timestamp}`,
+          paymentMethod: 'cash',
+          outstandingAfterCollection: 0,
+          installmentTarget: parsedSavings,
+          installmentDue: 0,
+          branch: branch || member.branch || '',
+          branchCode: branchCode || member.branchCode || '',
+          collectionDay: currentDay,
+          weekNumber: weekNumber,
+          monthYear: monthYear,
+          note: `Initial Savings - ৳${parsedSavings} - Member: ${name}`,
+          createdBy: req.user.id
+        });
+        console.log(`✅ Created CollectionHistory for initial savings: ৳${parsedSavings}`);
+      } catch (historyError) {
+        console.error('❌ Error creating CollectionHistory for initial savings:', historyError);
+      }
     }
 
     // 🎯 NEW: Add member to CollectionSchedule
