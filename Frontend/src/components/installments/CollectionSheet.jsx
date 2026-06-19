@@ -1925,7 +1925,6 @@ const CollectionSheet = ({ selectedCollector, selectedBranch, selectedDay, onGoB
                     ))}
                   </tr>
                 </thead>
-                <tbody>
                   {(() => {
                     // ✅ GROUPING LOGIC BASED ON COLLECTOR'S SCHEDULE TYPE
                     let membersWithFrequency;
@@ -1958,11 +1957,13 @@ const CollectionSheet = ({ selectedCollector, selectedBranch, selectedDay, onGoB
                       });
 
                     // Render with group headers
-                    const allRows = [];
+                    const tbodies = [];
                     let lastGroup = null;
-                    let memberCount = 0; // ✅ Track member count for pagination
+                    let memberCount = 0; // ✅ Track member count
 
                     sortedMembers.forEach((member, memberIndex) => {
+                      const memberTbodyRows = [];
+
                       // Insert group header when group changes
                       if (member._frequency !== lastGroup) {
                         // ✅ Group names based on collector type
@@ -1974,7 +1975,7 @@ const CollectionSheet = ({ selectedCollector, selectedBranch, selectedDay, onGoB
                           groupName = member._frequency === 'weekly' ? 'JAGORON' : 'AGROSOR';
                         }
 
-                        allRows.push(
+                        memberTbodyRows.push(
                           <tr key={`group-${member._frequency}`} className="bg-white">
                             <td colSpan={12 + installmentDates.length} className="border border-black py-1.5 font-bold text-black text-sm" style={{ textAlign: 'left', paddingLeft: '140px' }}>
                               {groupName}
@@ -2667,67 +2668,48 @@ const CollectionSheet = ({ selectedCollector, selectedBranch, selectedDay, onGoB
                         );
                       })(); // Close memberRows IIFE
 
-                      // Push member rows to allRows
+                      // Push member rows to memberTbodyRows
                       if (Array.isArray(memberRows)) {
-                        allRows.push(...memberRows);
+                        memberTbodyRows.push(...memberRows);
                       } else if (memberRows) {
-                        allRows.push(memberRows);
+                        memberTbodyRows.push(memberRows);
                       }
 
                       // ✅ INCREMENT member count
                       memberCount++;
 
-                      // ✅ PAGE BREAK LOGIC:
-                      // - 1st page: header is large, so only 9 members fit → break after 9
-                      // - Subsequent pages: header repeats smaller, 11 members fit → break every 11
-                      // Formula: break at 9, then at 9+11=20, 9+22=31, etc.
-                      const FIRST_PAGE_MEMBERS = 9;
-                      const SUBSEQUENT_PAGE_MEMBERS = 11;
-                      
-                      let shouldBreak = false;
-                      if (memberCount === FIRST_PAGE_MEMBERS) {
-                        shouldBreak = true; // after 9th member
-                      } else if (memberCount > FIRST_PAGE_MEMBERS && (memberCount - FIRST_PAGE_MEMBERS) % SUBSEQUENT_PAGE_MEMBERS === 0) {
-                        shouldBreak = true; // after 20th, 31st, 42nd... member
-                      }
-
-                      if (shouldBreak && memberIndex < sortedMembers.length - 1) {
-                        allRows.push(
-                          <tr key={`page-break-${memberCount}`} className="page-break-row">
-                            <td colSpan={12 + installmentDates.length} className="border-0 p-0" style={{ border: 'none' }}>
-                              {/* Modern break property and traditional one, plus a dummy div to help browsers */}
-                              <div style={{ pageBreakAfter: 'always', breakAfter: 'page', height: '0', padding: '0', margin: '0' }}></div>
-                            </td>
-                          </tr>
-                        );
-                        console.log(`📄 Page break inserted after member ${memberCount} (${member.name})`);
-                      }
+                      // Push a tbody for this member (which might also contain the group header if it was just added)
+                      tbodies.push(
+                        <tbody key={`member-tbody-${member._id || memberIndex}`} className="member-tbody">
+                          {memberTbodyRows}
+                        </tbody>
+                      );
                     });
 
-                    // ✅ SIGNATURE: Add signature ONLY at the very end of the entire list
-                    allRows.push(
-                      <tr key="signature-row-final" className="signature-row">
-                        <td colSpan={12 + installmentDates.length} className="border-0 p-0" style={{ border: 'none' }}>
-                          <div style={{ marginTop: '0.8cm', marginBottom: '0.2cm', padding: '0 2cm' }}>
-                            <div className="flex justify-between items-end">
-                              <div className="text-center">
-                                <div className="border-t-2 border-black w-48 mb-2" style={{ borderTop: '2px solid black', width: '12rem', marginBottom: '0.5rem' }}></div>
-                                <p className="text-sm font-semibold" style={{ fontSize: '0.875rem', fontWeight: '600' }}>Manager Signature</p>
-                              </div>
-                              <div className="text-center">
-                                <div className="border-t-2 border-black w-48 mb-2" style={{ borderTop: '2px solid black', width: '12rem', marginBottom: '0.5rem' }}></div>
-                                <p className="text-sm font-semibold" style={{ fontSize: '0.875rem', fontWeight: '600' }}>Field Officer Signature</p>
+                    // ✅ SIGNATURE: Add signature inside its own tbody at the very end of the entire list
+                    tbodies.push(
+                      <tbody key="signature-tbody" className="signature-tbody">
+                        <tr className="signature-row">
+                          <td colSpan={12 + installmentDates.length} className="border-0 p-0" style={{ border: 'none' }}>
+                            <div style={{ marginTop: '0.8cm', marginBottom: '0.2cm', padding: '0 2cm' }}>
+                              <div className="flex justify-between items-end">
+                                <div className="text-center">
+                                  <div className="border-t-2 border-black w-48 mb-2" style={{ borderTop: '2px solid black', width: '12rem', marginBottom: '0.5rem' }}></div>
+                                  <p className="text-sm font-semibold" style={{ fontSize: '0.875rem', fontWeight: '600' }}>Manager Signature</p>
+                                </div>
+                                <div className="text-center">
+                                  <div className="border-t-2 border-black w-48 mb-2" style={{ borderTop: '2px solid black', width: '12rem', marginBottom: '0.5rem' }}></div>
+                                  <p className="text-sm font-semibold" style={{ fontSize: '0.875rem', fontWeight: '600' }}>Field Officer Signature</p>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
-                      </tr>
+                          </td>
+                        </tr>
+                      </tbody>
                     );
 
-                    // ✅ FINAL FIX: Add signature as LAST ROW in tbody
-                    return allRows;
+                    return tbodies;
                   })()}
-                </tbody>
               </table>
 
             </div>

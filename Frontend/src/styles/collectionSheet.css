@@ -83,6 +83,17 @@
     page-break-inside: auto !important;
   }
 
+  /* Prevent page breaks within a member's group of rows (especially for rowspans) */
+  .member-tbody {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .signature-tbody {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
   /* ✅ GLOBAL RESET: Prevent any parent from blocking page breaks */
   html,
   body,
