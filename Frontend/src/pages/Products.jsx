@@ -100,7 +100,7 @@ const TodayReportModal = ({ onClose }) => {
                         </div>
                         <div className="text-right">
                           <p className="text-sm font-bold text-blue-700">৳{fmt(p.unitPrice)}<span className="text-xs font-normal text-gray-400">/{p.unit}</span></p>
-                          <p className="text-xs text-gray-500">Stock: {p.availableStock} {p.unit}</p>
+                          <p className="text-xs text-gray-500">Stock: {p.initialStock !== undefined ? p.initialStock : p.availableStock} {p.unit}</p>
                           <p className="text-xs font-semibold text-green-600">Value: ৳{fmt(p.stockValue)}</p>
                         </div>
                       </div>

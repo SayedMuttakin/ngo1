@@ -169,6 +169,7 @@ router.post('/', protect, authorize('manager', 'admin'), async (req, res) => {
       unitPrice: parseFloat(unitPrice),
       totalStock: parseInt(totalStock),
       availableStock: parseInt(totalStock), // Initially all stock is available
+      initialStock: parseInt(totalStock), // Store initial stock
       minimumStock: parseInt(minimumStock) || 10,
       expiryDate: expiryDate || null,
       supplier: supplier || {},
@@ -742,18 +743,22 @@ router.get('/today/report', protect, async (req, res) => {
       success: true,
       data: {
         date: `${bdYear}-${String(bdMonth + 1).padStart(2, '0')}-${String(bdDay).padStart(2, '0')}`,
-        productsAdded: productsAddedToday.map(p => ({
-          _id: p._id,
-          name: p.name,
-          category: p.category,
-          unitPrice: p.unitPrice,
-          totalStock: p.totalStock,
-          availableStock: p.availableStock,
-          unit: p.unit,
-          createdBy: p.createdBy?.name || 'Unknown',
-          createdAt: p.createdAt,
-          stockValue: p.availableStock * p.unitPrice
-        })),
+        productsAdded: productsAddedToday.map(p => {
+          const addedQty = p.initialStock !== undefined ? p.initialStock : p.totalStock;
+          return {
+            _id: p._id,
+            name: p.name,
+            category: p.category,
+            unitPrice: p.unitPrice,
+            totalStock: p.totalStock,
+            availableStock: p.availableStock,
+            initialStock: addedQty,
+            unit: p.unit,
+            createdBy: p.createdBy?.name || 'Unknown',
+            createdAt: p.createdAt,
+            stockValue: addedQty * p.unitPrice
+          };
+        }),
         productsRestocked: productsRestockedToday,
         sales: {
           totalTransactions: todaySales.length,
@@ -766,7 +771,10 @@ router.get('/today/report', protect, async (req, res) => {
           newProductsCount: productsAddedToday.length,
           restockedCount: productsRestockedToday.length,
           totalSalesValue,
-          totalNewStockValue: productsAddedToday.reduce((sum, p) => sum + (p.availableStock * p.unitPrice), 0)
+          totalNewStockValue: productsAddedToday.reduce((sum, p) => {
+            const addedQty = p.initialStock !== undefined ? p.initialStock : p.totalStock;
+            return sum + (addedQty * p.unitPrice);
+          }, 0)
         }
       }
     });
