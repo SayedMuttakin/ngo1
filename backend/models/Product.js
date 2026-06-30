@@ -85,7 +85,25 @@ const productSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
-  }
+  },
+  restockHistory: [{
+    quantity: {
+      type: Number,
+      required: true
+    },
+    date: {
+      type: Date,
+      default: Date.now
+    },
+    updatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    reason: {
+      type: String,
+      trim: true
+    }
+  }]
 }, {
   timestamps: true
 });

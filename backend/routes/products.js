@@ -329,6 +329,12 @@ router.patch('/:id/stock', protect, authorize('manager', 'admin'), async (req, r
     if (action === 'add') {
       product.totalStock += qty;
       product.availableStock += qty;
+      product.restockHistory.push({
+        quantity: qty,
+        date: new Date(),
+        updatedBy: req.user.id,
+        reason: reason || 'Stock added'
+      });
     } else if (action === 'remove') {
       if (product.availableStock < qty) {
         return res.status(400).json({
@@ -631,11 +637,40 @@ router.get('/today/report', protect, async (req, res) => {
     }).populate('createdBy', 'name').sort({ createdAt: -1 });
 
     // 2. Products updated (stock added) today
-    const productsUpdatedToday = await Product.find({
+    const productsWithRestocks = await Product.find({
       isActive: true,
-      updatedAt: { $gte: todayStart, $lte: todayEnd },
-      createdAt: { $lt: todayStart } // Only updates, not new ones
-    }).populate('updatedBy', 'name').sort({ updatedAt: -1 });
+      'restockHistory.date': { $gte: todayStart, $lte: todayEnd }
+    }).populate({
+      path: 'restockHistory.updatedBy',
+      select: 'name'
+    }).populate('updatedBy', 'name');
+
+    // Format productsRestocked array
+    const productsRestockedToday = productsWithRestocks.map(p => {
+      // Filter today's restock entries
+      const todayRestocks = p.restockHistory.filter(r => r.date >= todayStart && r.date <= todayEnd);
+      const totalAdded = todayRestocks.reduce((sum, r) => sum + r.quantity, 0);
+
+      // Get the latest restock entry for display details
+      const latestRestock = todayRestocks.reduce((latest, current) => {
+        return !latest.date || current.date > latest.date ? current : latest;
+      }, {});
+
+      return {
+        _id: p._id,
+        name: p.name,
+        category: p.category,
+        unitPrice: p.unitPrice,
+        availableStock: p.availableStock,
+        unit: p.unit,
+        addedQuantity: totalAdded,
+        updatedBy: latestRestock.updatedBy?.name || p.updatedBy?.name || 'Unknown',
+        updatedAt: latestRestock.date || p.updatedAt
+      };
+    });
+
+    // Sort restocked products by updatedAt descending
+    productsRestockedToday.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 
     // 3. Today's product sales from Installments
     const Installment = require('../models/Installment');
@@ -719,16 +754,7 @@ router.get('/today/report', protect, async (req, res) => {
           createdAt: p.createdAt,
           stockValue: p.availableStock * p.unitPrice
         })),
-        productsRestocked: productsUpdatedToday.map(p => ({
-          _id: p._id,
-          name: p.name,
-          category: p.category,
-          unitPrice: p.unitPrice,
-          availableStock: p.availableStock,
-          unit: p.unit,
-          updatedBy: p.updatedBy?.name || 'Unknown',
-          updatedAt: p.updatedAt
-        })),
+        productsRestocked: productsRestockedToday,
         sales: {
           totalTransactions: todaySales.length,
           totalSalesValue,
@@ -738,7 +764,7 @@ router.get('/today/report', protect, async (req, res) => {
         },
         summary: {
           newProductsCount: productsAddedToday.length,
-          restockedCount: productsUpdatedToday.length,
+          restockedCount: productsRestockedToday.length,
           totalSalesValue,
           totalNewStockValue: productsAddedToday.reduce((sum, p) => sum + (p.availableStock * p.unitPrice), 0)
         }

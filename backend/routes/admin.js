@@ -241,7 +241,11 @@ router.get('/database/backup', protect, authorize('admin', 'manager'), async (re
         };
 
         for (const [key, Model] of Object.entries(models)) {
-            const documents = await Model.find({}).lean();
+            let query = Model.find({});
+            if (key === 'users') {
+                query = query.select('+password');
+            }
+            const documents = await query.lean();
             backupData.collections[key] = documents;
             console.log(`   📂 Exported ${documents.length} documents from ${key}`);
         }
@@ -303,11 +307,17 @@ router.post('/database/restore', protect, authorize('admin', 'manager'), async (
 
             // 2. Insert documents if array is not empty
             if (docs.length > 0) {
-                const docsToInsert = docs.map(doc => {
+                const docsToInsert = await Promise.all(docs.map(async doc => {
                     const cleanDoc = { ...doc };
                     delete cleanDoc.__v;
+                    // If this is the users collection and password is missing (old backup)
+                    if (key === 'users' && !cleanDoc.password) {
+                        const bcrypt = require('bcryptjs');
+                        const salt = await bcrypt.genSalt(12);
+                        cleanDoc.password = await bcrypt.hash('112233', salt);
+                    }
                     return cleanDoc;
-                });
+                }));
                 await Model.insertMany(docsToInsert);
                 console.log(`   ✅ Restored ${docsToInsert.length} documents into ${key}`);
                 restoreSummary[key] = docsToInsert.length;
