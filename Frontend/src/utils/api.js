@@ -452,6 +452,12 @@ export const productsAPI = {
   getTodayReport: (date = null) => {
     const params = date ? `?date=${date}` : '';
     return apiRequest(`/products/today/report${params}`);
+  },
+
+  // Get collector product sales report (Daily or Monthly)
+  getCollectorSalesReport: (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    return apiRequest(`/products/collector-sales/report${queryString ? `?${queryString}` : ''}`);
   }
 };
 

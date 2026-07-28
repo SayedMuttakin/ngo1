@@ -21,7 +21,8 @@ import {
   MessageSquare,
   Shield,
   ClipboardList,
-  Banknote
+  Banknote,
+  ShoppingBag
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import logo from '../assets/logo.png';
@@ -38,6 +39,7 @@ const DashboardLayout = () => {
     { id: 'activity-log', name: 'Activity Log', icon: Activity, path: '/activity-log' },
     { id: 'products', name: 'Product Management', icon: Package, path: '/products' },
     { id: 'sales-report', name: 'Sales Report', icon: BarChart3, path: '/sales-report' },
+    { id: 'collector-sales-report', name: 'Collector Sales Report', icon: ShoppingBag, path: '/collector-sales-report' },
     { id: 'installments', name: 'Installment Collection', icon: DollarSign, path: '/installments?fresh=true' },
     { id: 'pending-installments', name: 'Pending Installments', icon: Bell, path: '/pending-installments' },
 
@@ -234,6 +236,7 @@ const getPageTitle = (pathname) => {
     '/activity-log': 'Activity Log',
     '/products': 'Product Management',
     '/sales-report': 'Sales Report',
+    '/collector-sales-report': 'Collector Sales Report',
     '/installments': 'Installment Collection',
     '/pending-installments': 'Pending Installments',
     '/daily-collection': 'Daily Total Collection',

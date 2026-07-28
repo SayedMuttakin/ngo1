@@ -788,5 +788,188 @@ router.get('/today/report', protect, async (req, res) => {
   }
 });
 
+// @desc    Get collector product sales report (Daily or Monthly)
+// @route   GET /api/products/collector-sales/report
+// @access  Private
+router.get('/collector-sales/report', protect, async (req, res) => {
+  try {
+    const { date, month } = req.query;
+    const User = require('../models/User');
+    const Installment = require('../models/Installment');
+
+    let start, end, periodLabel, filterType;
+
+    if (month) {
+      // month is YYYY-MM
+      filterType = 'monthly';
+      const [year, m] = month.split('-').map(Number);
+      // BD Time start of month
+      start = new Date(Date.UTC(year, m - 1, 0, 18, 0, 0, 0));
+      end = new Date(Date.UTC(year, m, 0, 17, 59, 59, 999));
+      periodLabel = month;
+    } else {
+      filterType = 'daily';
+      let targetDateStr = date;
+      if (!targetDateStr) {
+        // Default to today in BD time
+        const now = new Date();
+        const bdNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Dhaka' }));
+        const y = bdNow.getFullYear();
+        const m = String(bdNow.getMonth() + 1).padStart(2, '0');
+        const d = String(bdNow.getDate()).padStart(2, '0');
+        targetDateStr = `${y}-${m}-${d}`;
+      }
+      const [year, m, day] = targetDateStr.split('-').map(Number);
+      start = new Date(Date.UTC(year, m - 1, day - 1, 18, 0, 0, 0));
+      end = new Date(Date.UTC(year, m - 1, day, 17, 59, 59, 999));
+      periodLabel = targetDateStr;
+    }
+
+    console.log(`📊 Fetching collector product sales report (${filterType})`);
+
+    // Get all active collectors
+    const collectors = await User.find({
+      role: 'collector',
+      isActive: true
+    }).select('_id name email phone branch branchCode');
+
+    // Find all product sale installments within date range
+    const productSales = await Installment.find({
+      collectionDate: { $gte: start, $lte: end },
+      installmentType: 'extra',
+      note: { $regex: 'Product Sale:', $options: 'i' },
+      status: 'collected',
+      isActive: true
+    })
+      .populate('member', 'name memberId branchCode phone')
+      .populate('collector', 'name email phone')
+      .sort({ collectionDate: -1 });
+
+    // Group sales by collector
+    const collectorMap = {};
+
+    // Initialize all active collectors in the map
+    collectors.forEach(c => {
+      collectorMap[c._id.toString()] = {
+        collectorId: c._id,
+        name: c.name,
+        email: c.email,
+        phone: c.phone,
+        branch: c.branch,
+        branchCode: c.branchCode,
+        totalSalesValue: 0,
+        totalTransactions: 0,
+        totalItemsCount: 0,
+        sales: []
+      };
+    });
+
+    let grandTotalSalesValue = 0;
+    let totalTransactionsCount = 0;
+
+    for (const sale of productSales) {
+      let collectorId = sale.collector?._id ? sale.collector._id.toString() : null;
+
+      if (collectorId && !collectorMap[collectorId]) {
+        collectorMap[collectorId] = {
+          collectorId: sale.collector._id,
+          name: sale.collector.name || 'Unknown',
+          email: sale.collector.email || '',
+          phone: sale.collector.phone || '',
+          branch: sale.collector.branch || '',
+          branchCode: sale.collector.branchCode || '',
+          totalSalesValue: 0,
+          totalTransactions: 0,
+          totalItemsCount: 0,
+          sales: []
+        };
+      } else if (!collectorId) {
+        const unassignedKey = 'unassigned';
+        if (!collectorMap[unassignedKey]) {
+          collectorMap[unassignedKey] = {
+            collectorId: 'unassigned',
+            name: 'Unassigned / Admin',
+            email: '',
+            phone: '',
+            branch: '',
+            branchCode: '',
+            totalSalesValue: 0,
+            totalTransactions: 0,
+            totalItemsCount: 0,
+            sales: []
+          };
+        }
+        collectorId = unassignedKey;
+      }
+
+      let noteMatch = sale.note.match(/Product Sale: (.+?) \(Qty: ([\d.]+)\s*(\w+),\s*৳([\d,]+)\)/);
+      let productName = 'Product Sale', quantity = 1, unit = 'piece', subtotal = sale.amount || 0;
+
+      if (noteMatch) {
+        productName = noteMatch[1].trim();
+        quantity = parseFloat(noteMatch[2]);
+        unit = noteMatch[3];
+        subtotal = parseFloat(noteMatch[4].replace(/,/g, ''));
+      } else {
+        noteMatch = sale.note.match(/Product Sale: (.+?) \(Qty: ([\d.]+),\s*৳([\d,]+)\)/);
+        if (noteMatch) {
+          productName = noteMatch[1].trim();
+          quantity = parseFloat(noteMatch[2]);
+          unit = 'piece';
+          subtotal = parseFloat(noteMatch[3].replace(/,/g, ''));
+        }
+      }
+
+      const saleItem = {
+        installmentId: sale._id,
+        productName,
+        quantity,
+        unit,
+        subtotal,
+        memberId: sale.member?._id,
+        memberName: sale.member?.name || 'Unknown Member',
+        memberCode: sale.member?.memberId || 'N/A',
+        memberPhone: sale.member?.phone || '',
+        collectionDate: sale.collectionDate,
+        note: sale.note
+      };
+
+      collectorMap[collectorId].totalSalesValue += subtotal;
+      collectorMap[collectorId].totalTransactions += 1;
+      collectorMap[collectorId].totalItemsCount += quantity;
+      collectorMap[collectorId].sales.push(saleItem);
+
+      grandTotalSalesValue += subtotal;
+      totalTransactionsCount += 1;
+    }
+
+    const collectorResults = Object.values(collectorMap).sort((a, b) => b.totalSalesValue - a.totalSalesValue);
+    const activeSellersCount = collectorResults.filter(c => c.totalSalesValue > 0).length;
+
+    res.json({
+      success: true,
+      data: {
+        filterType,
+        period: periodLabel,
+        summary: {
+          grandTotalSalesValue,
+          totalTransactionsCount,
+          totalCollectorsCount: collectors.length,
+          activeSellersCount
+        },
+        collectors: collectorResults
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching collector sales report:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching collector sales report',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;
 

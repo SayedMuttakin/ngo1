@@ -29,6 +29,7 @@ import SMSManagement from './pages/SMSManagement';
 import AdminControlPanel from './pages/AdminControlPanel';
 import CollectorSavings from './pages/CollectorSavings';
 import DailyCollectionReport from './pages/DailyCollectionReport';
+import CollectorSalesReport from './pages/CollectorSalesReport';
 
 // Context
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -80,6 +81,7 @@ function AppContent() {
               <Route path="activity-log" element={<ActivityLog />} />
               <Route path="products" element={<Products />} />
               <Route path="sales-report" element={<SalesReport />} />
+              <Route path="collector-sales-report" element={<CollectorSalesReport />} />
               <Route path="installments" element={<Installments />} />
               <Route path="pending-installments" element={<PendingInstallments />} />
               <Route path="extra-installments" element={<ExtraInstallments />} />
