@@ -398,22 +398,29 @@ router.get('/trends', protect, async (req, res) => {
 // @access  Private
 router.get('/daily-collection', protect, async (req, res) => {
   try {
-    const { date } = req.query;
+    const { date, month } = req.query;
 
-    // Parse date or use today
-    let targetDate;
-    if (date) {
-      targetDate = new Date(date);
+    // Calculate date range for Day or Month
+    let startOfPeriod, endOfPeriod, displayPeriod;
+    if (month) {
+      // month is expected to be 'YYYY-MM'
+      const [year, m] = month.split('-').map(Number);
+      startOfPeriod = new Date(year, m - 1, 1, 0, 0, 0, 0);
+      endOfPeriod = new Date(year, m, 0, 23, 59, 59, 999);
+      displayPeriod = month;
     } else {
-      targetDate = new Date();
+      let targetDate;
+      if (date) {
+        targetDate = new Date(date);
+      } else {
+        targetDate = new Date();
+      }
+      startOfPeriod = new Date(targetDate);
+      startOfPeriod.setHours(0, 0, 0, 0);
+      endOfPeriod = new Date(targetDate);
+      endOfPeriod.setHours(23, 59, 59, 999);
+      displayPeriod = startOfPeriod.toISOString().split('T')[0];
     }
-
-    // Set date range for the day
-    const startOfDay = new Date(targetDate);
-    startOfDay.setHours(0, 0, 0, 0);
-
-    const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
 
     // Get all active collectors
     const activeCollectors = await User.find({
@@ -421,18 +428,17 @@ router.get('/daily-collection', protect, async (req, res) => {
       isActive: true
     }).select('_id name email phone branch branchCode');
 
-    // Get daily collection data for each collector
+    // Get collection data for each collector within the period
     const collectorsPerformance = await Promise.all(
       activeCollectors.map(async (collector) => {
-        // Get collector's installments for the day
-        // ✅ CRITICAL FIX: Use updatedAt instead of collectionDate to capture all collections
-        // Including past-due, current-due, and advance payments
-        const allUpdatedToday = await Installment.find({
+        const allUpdatedInPeriod = await Installment.find({
           collector: collector._id,
-          updatedAt: { $gte: startOfDay, $lte: endOfDay },
           status: { $in: ['collected', 'partial'] },
-          // ✅ Removed isAutoApplied filter - we'll check paymentHistory instead
-          // ✅ EXCLUDE savings collections, withdrawals, and product sale installments
+          $or: [
+            { 'paymentHistory.date': { $gte: startOfPeriod, $lte: endOfPeriod } },
+            { updatedAt: { $gte: startOfPeriod, $lte: endOfPeriod } },
+            { collectionDate: { $gte: startOfPeriod, $lte: endOfPeriod } }
+          ],
           $and: [
             {
               $or: [
@@ -452,47 +458,38 @@ router.get('/daily-collection', protect, async (req, res) => {
           isActive: true
         }).populate('member', 'name phone branch branchCode monthlyInstallment');
 
-        // Filter to only installments with manual payments today
-        const dailyInstallments = allUpdatedToday.filter(inst => {
-          // ✅ EXCLUDE pure auto-applied installments
+        // Filter to only installments with payments within the period
+        const periodInstallments = allUpdatedInPeriod.filter(inst => {
           if (inst.isAutoApplied && (!inst.paymentHistory || inst.paymentHistory.length === 0)) {
             return false;
           }
 
-          // Check if has payments today in paymentHistory
           if (inst.paymentHistory && inst.paymentHistory.length > 0) {
             return inst.paymentHistory.some(payment => {
               if (!payment.date) return false;
               const paymentDate = new Date(payment.date);
-              return paymentDate >= startOfDay && paymentDate <= endOfDay;
+              return paymentDate >= startOfPeriod && paymentDate <= endOfPeriod;
             });
           }
 
-          // Legacy fallback
-          return inst.collectionDate && inst.collectionDate >= startOfDay && inst.collectionDate <= endOfDay;
+          return inst.collectionDate && inst.collectionDate >= startOfPeriod && inst.collectionDate <= endOfPeriod;
         });
 
-        // ✅ CRITICAL FIX: Calculate total collection by summing ALL payments from paymentHistory made TODAY
-        // This fixes the bug where multiple payments from same installment only showed last payment
-        // Example: If ৳1000 then ৳500 collected today, this sums both = ৳1500 (not just ৳500)
+        // Calculate total collection by summing all payments from paymentHistory made in the period
         let totalCollection = 0;
-        dailyInstallments.forEach(inst => {
-          // Sum all payments from paymentHistory that were made on the target date
+        periodInstallments.forEach(inst => {
           if (inst.paymentHistory && inst.paymentHistory.length > 0) {
-            const todayPayments = inst.paymentHistory.filter(payment => {
+            const periodPayments = inst.paymentHistory.filter(payment => {
               if (!payment.date) return false;
               const paymentDate = new Date(payment.date);
-              // Check if payment was made on the target day
-              return paymentDate >= startOfDay && paymentDate <= endOfDay;
+              return paymentDate >= startOfPeriod && paymentDate <= endOfPeriod;
             });
 
-            const todayTotal = todayPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
-            if (todayTotal > 0) {
-              totalCollection += todayTotal;
-              console.log(`💰 Installment ${inst._id}: ${todayPayments.length} payments today = ৳${todayTotal}`);
+            const periodTotal = periodPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
+            if (periodTotal > 0) {
+              totalCollection += periodTotal;
             }
           } else {
-            // Fallback for installments without paymentHistory (legacy records)
             const amount = (inst.lastPaymentAmount != null && inst.lastPaymentAmount > 0)
               ? inst.lastPaymentAmount
               : (inst.paidAmount != null && inst.paidAmount > 0)
@@ -502,24 +499,21 @@ router.get('/daily-collection', protect, async (req, res) => {
           }
         });
 
-        // Get unique members who paid today
-        const uniqueMembers = [...new Set(dailyInstallments.map(inst => inst.member._id.toString()))];
-        const totalMembers = uniqueMembers.length;
+        // Get unique members who paid in the period
+        const uniqueMembers = [...new Set(periodInstallments.map(inst => inst.member?._id ? inst.member._id.toString() : null).filter(Boolean))];
 
-        // Get collector's assigned branches from Branch model
+        // Get collector's assigned branches
         const Branch = require('../models/Branch');
         const assignedBranches = await Branch.find({
           assignedCollector: collector._id,
           isActive: true
         }).select('name branchCode');
 
-        // Get branch details
         const branchDetails = assignedBranches.map(branch => ({
           name: branch.name,
           code: branch.branchCode
         }));
 
-        // Count total members in these branches
         let totalMembersInBranches = 0;
         for (const branch of assignedBranches) {
           const memberCount = await Member.countDocuments({
@@ -529,8 +523,7 @@ router.get('/daily-collection', protect, async (req, res) => {
           totalMembersInBranches += memberCount;
         }
 
-        // Get last update time (latest installment)
-        const lastInstallment = dailyInstallments.sort((a, b) => new Date(b.collectionDate) - new Date(a.collectionDate))[0];
+        const lastInstallment = periodInstallments.sort((a, b) => new Date(b.collectionDate) - new Date(a.collectionDate))[0];
         const lastUpdated = lastInstallment ? lastInstallment.collectionDate : null;
 
         return {
@@ -545,35 +538,32 @@ router.get('/daily-collection', protect, async (req, res) => {
           branches: branchDetails,
           branchCount: branchDetails.length,
           lastUpdated,
-          installments: dailyInstallments.length,
-          regularInstallments: dailyInstallments.filter(inst => inst.installmentType === 'regular').length,
-          extraInstallments: dailyInstallments.filter(inst => inst.installmentType === 'extra').length,
+          installments: periodInstallments.length,
+          regularInstallments: periodInstallments.filter(inst => inst.installmentType === 'regular').length,
+          extraInstallments: periodInstallments.filter(inst => inst.installmentType === 'extra').length,
           status: 'Active'
         };
       })
     );
 
-    // Calculate overall totals
     const totalCollection = collectorsPerformance.reduce((sum, collector) => sum + collector.totalCollection, 0);
     const totalMembers = collectorsPerformance.reduce((sum, collector) => sum + collector.totalMembers, 0);
     const totalInstallments = collectorsPerformance.reduce((sum, collector) => sum + collector.installments, 0);
 
-    // Add percentage to each collector
     const collectorsWithPercentage = collectorsPerformance.map(collector => ({
       ...collector,
       collectionPercentage: totalCollection > 0 ? ((collector.totalCollection / totalCollection) * 100).toFixed(1) : 0
     }));
 
-    // Sort collectors by collection amount (highest first)
     collectorsWithPercentage.sort((a, b) => b.totalCollection - a.totalCollection);
 
-    // Get target collection (you can set this based on your business logic)
-    const targetCollection = 5000; // Default target, you can make this dynamic
+    const targetCollection = 5000;
 
     res.status(200).json({
       success: true,
       data: {
-        date: targetDate.toISOString().split('T')[0],
+        date: displayPeriod,
+        filterType: month ? 'monthly' : 'daily',
         summary: {
           totalCollection,
           totalMembers,

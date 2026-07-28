@@ -212,10 +212,13 @@ export const dashboardAPI = {
   // Get collection trends
   getTrends: (days = 7) => apiRequest(`/dashboard/trends?days=${days}`),
 
-  // Get daily collection performance
-  getDailyCollection: (date = null) => {
-    const params = date ? `?date=${date}` : '';
-    return apiRequest(`/dashboard/daily-collection${params}`);
+  // Get daily/monthly collection performance
+  getDailyCollection: (date = null, month = null) => {
+    const params = new URLSearchParams();
+    if (date) params.append('date', date);
+    if (month) params.append('month', month);
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return apiRequest(`/dashboard/daily-collection${queryString}`);
   },
 
   // Get daily savings performance

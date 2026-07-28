@@ -5,26 +5,33 @@ import { getCurrentBDDate, formatBDDateLong, toBDTime } from '../utils/dateUtils
 import toast from 'react-hot-toast';
 
 const DailyCollection = () => {
-  const [selectedDate, setSelectedDate] = useState(getCurrentBDDate()); // Bangladesh date
+  const [filterType, setFilterType] = useState('daily'); // 'daily' | 'monthly'
+  const [selectedDate, setSelectedDate] = useState(getCurrentBDDate()); // Bangladesh date (YYYY-MM-DD)
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentBDDate().substring(0, 7)); // YYYY-MM
   const [collectionData, setCollectionData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Fetch daily collection data from API - OPTIMIZED VERSION
-  const fetchDailyCollection = async (date = selectedDate) => {
+  // Fetch collection data from API - OPTIMIZED VERSION
+  const fetchDailyCollection = async (type = filterType, dateVal = selectedDate, monthVal = selectedMonth) => {
     try {
       setLoading(true);
-      console.log(`📅 Fetching daily collection for date: ${date}`);
+      const isMonthly = type === 'monthly';
+      console.log(`📅 Fetching collection data - Type: ${type}, Date: ${dateVal}, Month: ${monthVal}`);
 
       // Try to use backend API first
       try {
-        const apiResponse = await dashboardAPI.getDailyCollection(date);
+        const apiResponse = isMonthly 
+          ? await dashboardAPI.getDailyCollection(null, monthVal)
+          : await dashboardAPI.getDailyCollection(dateVal, null);
+
         if (apiResponse.success && apiResponse.data) {
           const { summary, collectors } = apiResponse.data;
 
           // Format data for frontend
           const formattedData = {
-            date: date,
+            date: isMonthly ? monthVal : dateVal,
+            filterType: type,
             totalCollection: summary.totalCollection || 0,
             activeCollectors: collectors.length,
             collectors: collectors.map(c => ({
@@ -343,7 +350,7 @@ const DailyCollection = () => {
   // Refresh data
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchDailyCollection();
+    await fetchDailyCollection(filterType, selectedDate, selectedMonth);
     setRefreshing(false);
     toast.success('Data refreshed successfully');
   };
@@ -351,12 +358,24 @@ const DailyCollection = () => {
   // Handle date change
   const handleDateChange = (newDate) => {
     setSelectedDate(newDate);
-    fetchDailyCollection(newDate);
+    fetchDailyCollection('daily', newDate, selectedMonth);
+  };
+
+  // Handle month change
+  const handleMonthChange = (newMonth) => {
+    setSelectedMonth(newMonth);
+    fetchDailyCollection('monthly', selectedDate, newMonth);
+  };
+
+  // Handle filter type toggle
+  const handleFilterTypeChange = (newType) => {
+    setFilterType(newType);
+    fetchDailyCollection(newType, selectedDate, selectedMonth);
   };
 
   // Load data on component mount (auto-refresh disabled)
   useEffect(() => {
-    fetchDailyCollection();
+    fetchDailyCollection(filterType, selectedDate, selectedMonth);
   }, []);
 
   // Fallback collectors data (for when API is not available)
@@ -518,26 +537,72 @@ const DailyCollection = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Date Selector and Actions */}
+        {/* Date / Month Selector and Actions */}
         <div className="bg-white rounded-xl shadow-sm border p-6 mb-8">
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-            <div className="flex items-center space-x-4">
+            <div className="flex flex-wrap items-center gap-4">
+              {/* Filter Mode Toggle */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <Calendar className="h-4 w-4 inline mr-1" />
-                  Select Date
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Filter Mode (ফিল্টার টাইপ)
                 </label>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => handleDateChange(e.target.value)}
-                  className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                  disabled={loading}
-                />
+                <div className="inline-flex rounded-lg border border-gray-200 bg-gray-100 p-1">
+                  <button
+                    onClick={() => handleFilterTypeChange('daily')}
+                    className={`px-4 py-2 text-sm font-semibold rounded-md transition-all ${
+                      filterType === 'daily'
+                        ? 'bg-white text-green-700 shadow-sm border border-gray-200'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Daily (দৈনিক)
+                  </button>
+                  <button
+                    onClick={() => handleFilterTypeChange('monthly')}
+                    className={`px-4 py-2 text-sm font-semibold rounded-md transition-all ${
+                      filterType === 'monthly'
+                        ? 'bg-white text-green-700 shadow-sm border border-gray-200'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Monthly (মাসিক)
+                  </button>
+                </div>
               </div>
 
-              <div className="text-sm text-gray-500">
-                <Clock className="h-4 w-4 inline mr-1" />
+              {/* Date or Month Picker */}
+              {filterType === 'daily' ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <Calendar className="h-4 w-4 inline mr-1 text-green-600" />
+                    Select Date
+                  </label>
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => handleDateChange(e.target.value)}
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm font-medium"
+                    disabled={loading}
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <Calendar className="h-4 w-4 inline mr-1 text-green-600" />
+                    Select Month (মাস নির্বাচন)
+                  </label>
+                  <input
+                    type="month"
+                    value={selectedMonth}
+                    onChange={(e) => handleMonthChange(e.target.value)}
+                    className="px-4 py-2 border border-green-400 bg-green-50 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm font-bold text-green-900"
+                    disabled={loading}
+                  />
+                </div>
+              )}
+
+              <div className="text-xs text-gray-500 self-end mb-2">
+                <Clock className="h-3.5 w-3.5 inline mr-1" />
                 Last updated: {toBDTime(new Date()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </div>
             </div>
@@ -546,13 +611,13 @@ const DailyCollection = () => {
               <button
                 onClick={handleRefresh}
                 disabled={refreshing}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-3 rounded-lg font-medium transition-all flex items-center space-x-2"
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2.5 rounded-lg font-medium transition-all flex items-center space-x-2 text-sm shadow-sm"
               >
                 <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
                 <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
               </button>
 
-              <button className="bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg font-medium transition-all flex items-center space-x-2">
+              <button className="bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg font-medium transition-all flex items-center space-x-2 text-sm shadow-sm">
                 <Download className="h-4 w-4" />
                 <span>Export Report</span>
               </button>
@@ -573,22 +638,34 @@ const DailyCollection = () => {
           <div className="mb-8">
             <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-xl shadow-lg p-8 text-white max-w-2xl mx-auto">
               <div className="text-center mb-4">
-                <p className="text-sm opacity-80 mb-1">Collection Date</p>
+                <p className="text-sm opacity-80 mb-1">
+                  {filterType === 'monthly' ? 'Collection Month' : 'Collection Date'}
+                </p>
                 <p className="text-xl font-semibold">
-                  {new Date(selectedDate).toLocaleDateString('en-US', {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  })}
+                  {filterType === 'monthly' ? (
+                    (() => {
+                      if (!selectedMonth) return 'Invalid Month';
+                      const [yr, mo] = selectedMonth.split('-');
+                      const dt = new Date(parseInt(yr), parseInt(mo) - 1, 1);
+                      return isNaN(dt.getTime()) ? selectedMonth : dt.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                    })()
+                  ) : (
+                    (() => {
+                      if (!selectedDate) return 'Invalid Date';
+                      const dt = new Date(selectedDate);
+                      return isNaN(dt.getTime()) ? selectedDate : dt.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                    })()
+                  )}
                 </p>
               </div>
               <div className="flex items-center justify-center">
                 <div className="text-center">
-                  <p className="text-lg opacity-90 mb-2">Total Collection</p>
+                  <p className="text-lg opacity-90 mb-2">
+                    {filterType === 'monthly' ? 'Total Monthly Collection' : 'Total Collection'}
+                  </p>
                   <p className="text-6xl font-bold">৳{displayData.summary.totalCollection.toLocaleString()}</p>
                   <p className="text-sm opacity-80 mt-3">
-                    {displayData.collectors.filter(c => c.totalCollection > 0).length} of {displayData.summary.activeCollectors} collectors collected today
+                    {displayData.collectors.filter(c => c.totalCollection > 0).length} of {displayData.summary.activeCollectors} collectors collected {filterType === 'monthly' ? 'this month' : 'today'}
                   </p>
                 </div>
                 <div className="bg-white bg-opacity-20 p-4 rounded-full ml-6">
@@ -603,7 +680,9 @@ const DailyCollection = () => {
         {!loading && (
           <div className="bg-white rounded-xl shadow-sm border p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Collectors Performance</h2>
+              <h2 className="text-2xl font-bold text-gray-900">
+                Collectors Performance {filterType === 'monthly' ? '(Monthly Summary)' : ''}
+              </h2>
               <div className="text-sm text-gray-500">
                 {displayData.summary.activeCollectors} Active Collectors
               </div>
@@ -612,7 +691,7 @@ const DailyCollection = () => {
             {displayData.collectors.length === 0 ? (
               <div className="text-center py-12">
                 <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500">No collection data available for {selectedDate}</p>
+                <p className="text-gray-500">No collection data available for {filterType === 'monthly' ? selectedMonth : selectedDate}</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -641,7 +720,9 @@ const DailyCollection = () => {
 
                       <div className="mt-4">
                         <div className="text-center">
-                          <p className="text-sm text-gray-600 mb-1">Today's Collection</p>
+                          <p className="text-sm text-gray-600 mb-1">
+                            {filterType === 'monthly' ? 'Monthly Collection' : "Today's Collection"}
+                          </p>
                           <p className={`text-3xl font-bold ${hasCollection ? 'text-green-600' : 'text-gray-400'
                             }`}>
                             ৳{(collector.totalCollection || 0).toLocaleString()}
