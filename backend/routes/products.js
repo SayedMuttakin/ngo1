@@ -791,11 +791,15 @@ router.get('/today/report', protect, async (req, res) => {
 // @desc    Get collector product sales report (Daily or Monthly)
 // @route   GET /api/products/collector-sales/report
 // @access  Private
+// @desc    Get collector product sales report (Daily or Monthly)
+// @route   GET /api/products/collector-sales/report
+// @access  Private
 router.get('/collector-sales/report', protect, async (req, res) => {
   try {
     const { date, month } = req.query;
     const User = require('../models/User');
     const Installment = require('../models/Installment');
+    const Branch = require('../models/Branch');
 
     let start, end, periodLabel, filterType;
 
@@ -825,13 +829,24 @@ router.get('/collector-sales/report', protect, async (req, res) => {
       periodLabel = targetDateStr;
     }
 
-    console.log(`📊 Fetching collector product sales report (${filterType})`);
+    console.log(`📊 Fetching collector product sales report (${filterType}) for period: ${periodLabel}`);
 
-    // Get all active collectors
-    const collectors = await User.find({
+    // Get all active collectors (ONLY users with role === 'collector')
+    const activeCollectors = await User.find({
       role: 'collector',
       isActive: true
-    }).select('_id name email phone branch branchCode');
+    }).select('_id name email phone branch branchCode role');
+
+    // Pre-fetch branches with assigned collectors
+    const activeBranches = await Branch.find({ isActive: true })
+      .populate('assignedCollector', '_id name email phone role');
+
+    const branchCollectorMap = {};
+    activeBranches.forEach(b => {
+      if (b.branchCode && b.assignedCollector && b.assignedCollector.role === 'collector') {
+        branchCollectorMap[b.branchCode] = b.assignedCollector;
+      }
+    });
 
     // Find all product sale installments within date range
     const productSales = await Installment.find({
@@ -841,15 +856,22 @@ router.get('/collector-sales/report', protect, async (req, res) => {
       status: 'collected',
       isActive: true
     })
-      .populate('member', 'name memberId branchCode phone')
-      .populate('collector', 'name email phone')
+      .populate({
+        path: 'member',
+        select: 'name memberId branchCode phone assignedCollector',
+        populate: {
+          path: 'assignedCollector',
+          select: '_id name email phone role'
+        }
+      })
+      .populate('collector', '_id name email phone role')
       .sort({ collectionDate: -1 });
 
     // Group sales by collector
     const collectorMap = {};
 
-    // Initialize all active collectors in the map
-    collectors.forEach(c => {
+    // Initialize map only with real collectors
+    activeCollectors.forEach(c => {
       collectorMap[c._id.toString()] = {
         collectorId: c._id,
         name: c.name,
@@ -868,27 +890,41 @@ router.get('/collector-sales/report', protect, async (req, res) => {
     let totalTransactionsCount = 0;
 
     for (const sale of productSales) {
-      let collectorId = sale.collector?._id ? sale.collector._id.toString() : null;
+      let targetCollector = null;
 
-      if (collectorId && !collectorMap[collectorId]) {
+      // 1. Check if sale.collector is a real collector (role === 'collector')
+      if (sale.collector && sale.collector.role === 'collector') {
+        targetCollector = sale.collector;
+      }
+      // 2. Fallback to member's assignedCollector if it's a real collector
+      else if (sale.member?.assignedCollector && sale.member.assignedCollector.role === 'collector') {
+        targetCollector = sale.member.assignedCollector;
+      }
+      // 3. Fallback to branch collector by member's branchCode
+      else if (sale.member?.branchCode && branchCollectorMap[sale.member.branchCode]) {
+        targetCollector = branchCollectorMap[sale.member.branchCode];
+      }
+
+      let collectorId = targetCollector ? targetCollector._id.toString() : 'unassigned';
+
+      if (collectorId !== 'unassigned' && !collectorMap[collectorId]) {
         collectorMap[collectorId] = {
-          collectorId: sale.collector._id,
-          name: sale.collector.name || 'Unknown',
-          email: sale.collector.email || '',
-          phone: sale.collector.phone || '',
-          branch: sale.collector.branch || '',
-          branchCode: sale.collector.branchCode || '',
+          collectorId: targetCollector._id,
+          name: targetCollector.name || 'Unknown Collector',
+          email: targetCollector.email || '',
+          phone: targetCollector.phone || '',
+          branch: targetCollector.branch || '',
+          branchCode: targetCollector.branchCode || '',
           totalSalesValue: 0,
           totalTransactions: 0,
           totalItemsCount: 0,
           sales: []
         };
-      } else if (!collectorId) {
-        const unassignedKey = 'unassigned';
-        if (!collectorMap[unassignedKey]) {
-          collectorMap[unassignedKey] = {
+      } else if (collectorId === 'unassigned') {
+        if (!collectorMap['unassigned']) {
+          collectorMap['unassigned'] = {
             collectorId: 'unassigned',
-            name: 'Unassigned / Admin',
+            name: 'Unassigned Direct Sales',
             email: '',
             phone: '',
             branch: '',
@@ -899,7 +935,6 @@ router.get('/collector-sales/report', protect, async (req, res) => {
             sales: []
           };
         }
-        collectorId = unassignedKey;
       }
 
       let noteMatch = sale.note.match(/Product Sale: (.+?) \(Qty: ([\d.]+)\s*(\w+),\s*৳([\d,]+)\)/);
@@ -943,8 +978,11 @@ router.get('/collector-sales/report', protect, async (req, res) => {
       totalTransactionsCount += 1;
     }
 
-    const collectorResults = Object.values(collectorMap).sort((a, b) => b.totalSalesValue - a.totalSalesValue);
-    const activeSellersCount = collectorResults.filter(c => c.totalSalesValue > 0).length;
+    // Filter out unassigned if it has 0 sales
+    const collectorResults = Object.values(collectorMap).filter(c => c.collectorId !== 'unassigned' || c.totalSalesValue > 0);
+    collectorResults.sort((a, b) => b.totalSalesValue - a.totalSalesValue);
+
+    const activeSellersCount = collectorResults.filter(c => c.collectorId !== 'unassigned' && c.totalSalesValue > 0).length;
 
     res.json({
       success: true,
@@ -954,7 +992,7 @@ router.get('/collector-sales/report', protect, async (req, res) => {
         summary: {
           grandTotalSalesValue,
           totalTransactionsCount,
-          totalCollectorsCount: collectors.length,
+          totalCollectorsCount: activeCollectors.length,
           activeSellersCount
         },
         collectors: collectorResults
