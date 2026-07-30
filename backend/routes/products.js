@@ -423,7 +423,7 @@ router.get('/stats/overview', protect, async (req, res) => {
 // @access  Private
 router.get('/sales/report', protect, async (req, res) => {
   try {
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, paymentType } = req.query; // 'all', 'cash', 'installment'
 
     // CRITICAL: Frontend sends Bangladesh date (YYYY-MM-DD)
     // We need to convert to UTC range that covers that Bangladesh date
@@ -453,8 +453,7 @@ router.get('/sales/report', protect, async (req, res) => {
 
     console.log('📊 Fetching sales report from Installments');
     console.log('   BD Date requested:', startDate, 'to', endDate);
-    console.log('   UTC Range: Start:', start.toISOString());
-    console.log('   UTC Range: End:', end.toISOString());
+    console.log('   Payment type filter:', paymentType || 'all');
 
     // Get product sales from Installments (installmentType: 'extra' with 'Product Sale:' in note)
     const Installment = require('../models/Installment');
@@ -473,66 +472,49 @@ router.get('/sales/report', protect, async (req, res) => {
 
     console.log(`✅ Found ${productSales.length} product sale records`);
 
-    // Debug: Show first 3 records
-    if (productSales.length > 0) {
-      console.log('Sample records:');
-      productSales.slice(0, 3).forEach((sale, i) => {
-        console.log(`  ${i + 1}. Note: ${sale.note}`);
-        console.log(`     Amount: ৳${sale.amount}`);
-        console.log(`     Date: ${sale.collectionDate}`);
-      });
-    } else {
-      console.log('⚠️ No product sales found in this date range');
-      console.log('Checking if there are ANY product sales in database...');
-      const anySales = await Installment.find({
-        installmentType: 'extra',
-        note: { $regex: 'Product Sale:', $options: 'i' },
-        status: 'collected',
-        isActive: true
-      }).limit(3);
-      console.log(`Found ${anySales.length} product sales in total (any date)`);
-      if (anySales.length > 0) {
-        anySales.forEach((sale, i) => {
-          console.log(`  ${i + 1}. Date: ${sale.collectionDate?.toISOString().split('T')[0] || 'No date'}`);
-          console.log(`     Note: ${sale.note?.substring(0, 80)}`);
-        });
-      }
-    }
-
     // Aggregate sales by product
     const productSalesMap = {};
     let totalSalesValue = 0;
     let totalQuantitySold = 0;
 
+    let totalCashSalesValue = 0;
+    let totalCashQuantity = 0;
+    let totalCashTransactions = 0;
+
+    let totalInstallmentSalesValue = 0;
+    let totalInstallmentQuantity = 0;
+    let totalInstallmentTransactions = 0;
+
     for (const sale of productSales) {
       try {
-        // Extract product details from note
-        // Format: "Product Sale: ProductName (Qty: X kg/piece, ৳XXX) | Payment: ..."
-        // OR: "Product Sale: ProductName (Qty: X, ৳XXX) | Payment: ..." (without unit)
+        const isCash = /Payment:\s*Cash/i.test(sale.note);
+        const salePaymentMode = isCash ? 'cash' : 'installment';
 
+        // Apply paymentType filter if specified
+        if (paymentType && paymentType !== 'all' && salePaymentMode !== paymentType) {
+          continue;
+        }
+
+        // Extract product details from note
         let noteMatch = sale.note.match(/Product Sale: (.+?) \(Qty: ([\d.]+)\s*(\w+),\s*৳([\d,]+)\)/);
         let productName, quantity, unit, subtotal;
 
         if (noteMatch) {
-          // Format with unit: "Product Sale: Mobile (Qty: 2 piece, ৳25400)"
           productName = noteMatch[1].trim();
           quantity = parseFloat(noteMatch[2]);
           unit = noteMatch[3];
           subtotal = parseFloat(noteMatch[4].replace(/,/g, ''));
         } else {
-          // Try format without unit: "Product Sale: Mobile (Qty: 2, ৳25400)"
           noteMatch = sale.note.match(/Product Sale: (.+?) \(Qty: ([\d.]+),\s*৳([\d,]+)\)/);
           if (noteMatch) {
             productName = noteMatch[1].trim();
             quantity = parseFloat(noteMatch[2]);
-            unit = 'piece'; // Default unit
+            unit = 'piece';
             subtotal = parseFloat(noteMatch[3].replace(/,/g, ''));
           }
         }
 
         if (noteMatch && productName) {
-
-          // Try to find the product in database
           const productDoc = await Product.findOne({ name: productName });
           const productId = productDoc ? productDoc._id.toString() : productName;
           const category = productDoc ? productDoc.category : 'Other';
@@ -547,7 +529,13 @@ router.get('/sales/report', protect, async (req, res) => {
               unitPrice: unitPrice,
               totalQuantity: 0,
               totalValue: 0,
-              transactions: 0
+              transactions: 0,
+              cashQuantity: 0,
+              cashValue: 0,
+              cashTransactions: 0,
+              installmentQuantity: 0,
+              installmentValue: 0,
+              installmentTransactions: 0
             };
           }
 
@@ -555,22 +543,33 @@ router.get('/sales/report', protect, async (req, res) => {
           productSalesMap[productId].totalValue += subtotal;
           productSalesMap[productId].transactions += 1;
 
+          if (isCash) {
+            productSalesMap[productId].cashQuantity += quantity;
+            productSalesMap[productId].cashValue += subtotal;
+            productSalesMap[productId].cashTransactions += 1;
+
+            totalCashSalesValue += subtotal;
+            totalCashQuantity += quantity;
+            totalCashTransactions += 1;
+          } else {
+            productSalesMap[productId].installmentQuantity += quantity;
+            productSalesMap[productId].installmentValue += subtotal;
+            productSalesMap[productId].installmentTransactions += 1;
+
+            totalInstallmentSalesValue += subtotal;
+            totalInstallmentQuantity += quantity;
+            totalInstallmentTransactions += 1;
+          }
+
           totalSalesValue += subtotal;
           totalQuantitySold += quantity;
-
-          console.log(`  ✅ ${productName}: ${quantity} ${unit} = ৳${subtotal}`);
-        } else {
-          console.log(`  ⚠️ Could not parse note: ${sale.note}`);
         }
       } catch (error) {
         console.error(`  ❌ Error processing sale ${sale._id}:`, error.message);
       }
     }
 
-    // Convert to array and sort by value
     const salesArray = Object.values(productSalesMap).sort((a, b) => b.totalValue - a.totalValue);
-
-    console.log(`📊 Summary: ${salesArray.length} products, ${totalQuantitySold} units, ৳${totalSalesValue}`);
 
     res.json({
       success: true,
@@ -583,7 +582,13 @@ router.get('/sales/report', protect, async (req, res) => {
           totalDistributions: productSales.length,
           totalProductsSold: salesArray.length,
           totalQuantitySold,
-          totalSalesValue
+          totalSalesValue,
+          totalCashSalesValue,
+          totalCashQuantity,
+          totalCashTransactions,
+          totalInstallmentSalesValue,
+          totalInstallmentQuantity,
+          totalInstallmentTransactions
         },
         productSales: salesArray
       }

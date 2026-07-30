@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, TrendingUp, Package, DollarSign, RefreshCw, Download, Filter, BarChart3 } from 'lucide-react';
+import { Calendar, TrendingUp, Package, DollarSign, RefreshCw, Download, Filter, BarChart3, Banknote, Clock } from 'lucide-react';
 import { productsAPI } from '../utils/api';
 import { getCurrentBDDate, formatBDDateLong } from '../utils/dateUtils';
 import toast from 'react-hot-toast';
@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 const SalesReport = () => {
   const [startDate, setStartDate] = useState(getCurrentBDDate()); // Start date for range
   const [endDate, setEndDate] = useState(getCurrentBDDate()); // End date for range
+  const [paymentType, setPaymentType] = useState('all'); // 'all', 'cash', 'installment'
   const [salesData, setSalesData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [filterCategory, setFilterCategory] = useState('all');
@@ -16,12 +17,12 @@ const SalesReport = () => {
 
   useEffect(() => {
     fetchSalesReport();
-  }, [startDate, endDate]);  // 🔹 Trigger API call when date range changes
+  }, [startDate, endDate, paymentType]);  // 🔹 Trigger API call when date range or payment type changes
 
   const fetchSalesReport = async () => {
     try {
       setLoading(true);
-      console.log('📊 Fetching sales report for date range:', { startDate, endDate });
+      console.log('📊 Fetching sales report for date range:', { startDate, endDate, paymentType });
       
       // Validate date range
       if (new Date(startDate) > new Date(endDate)) {
@@ -32,7 +33,8 @@ const SalesReport = () => {
       
       const response = await productsAPI.getSalesReport({
         startDate: startDate,
-        endDate: endDate
+        endDate: endDate,
+        paymentType: paymentType
       });
 
       console.log('✅ Sales report response:', response);
@@ -122,6 +124,18 @@ const SalesReport = () => {
     filterCategory === 'all' || product.category === filterCategory
   ) || [];
 
+  const summary = salesData?.summary || {
+    totalSalesValue: 0,
+    totalProductsSold: 0,
+    totalQuantitySold: 0,
+    totalCashSalesValue: 0,
+    totalCashQuantity: 0,
+    totalCashTransactions: 0,
+    totalInstallmentSalesValue: 0,
+    totalInstallmentQuantity: 0,
+    totalInstallmentTransactions: 0
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-100 p-6">
       <div className="max-w-7xl mx-auto">
@@ -131,19 +145,19 @@ const SalesReport = () => {
             <BarChart3 className="h-7 w-7 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-1">
-            Sales Report
+            Sales Report (পণ্য বিক্রয় রিপোর্ট)
           </h1>
-          <p className="text-gray-500 text-sm">View product sales for any date or date range</p>
+          <p className="text-gray-500 text-sm">View cash and installment product sales for any date range</p>
         </div>
 
-        {/* Date Filter Section */}
+        {/* Date & Payment Filter Section */}
         <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-6 mb-8">
-          <div className="flex flex-col lg:flex-row gap-4">
+          <div className="flex flex-col lg:flex-row gap-4 mb-4">
             {/* Date Range Picker */}
             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <Calendar className="h-4 w-4 inline mr-1" />
+                  <Calendar className="h-4 w-4 inline mr-1 text-blue-600" />
                   From Date
                 </label>
                 <input
@@ -156,7 +170,7 @@ const SalesReport = () => {
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <Calendar className="h-4 w-4 inline mr-1" />
+                  <Calendar className="h-4 w-4 inline mr-1 text-blue-600" />
                   To Date
                 </label>
                 <input
@@ -171,8 +185,49 @@ const SalesReport = () => {
             </div>
           </div>
 
+          {/* Payment Type Filter Tabs */}
+          <div className="mb-4 pt-3 border-t">
+            <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
+              Payment Mode (বিক্রির ধরন ফিল্টার):
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setPaymentType('all')}
+                className={`px-4 py-2 text-sm font-bold rounded-xl transition-all border ${
+                  paymentType === 'all'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-200'
+                }`}
+              >
+                All Sales (সকল বিক্রি)
+              </button>
+              <button
+                onClick={() => setPaymentType('cash')}
+                className={`px-4 py-2 text-sm font-bold rounded-xl transition-all border flex items-center gap-1.5 ${
+                  paymentType === 'cash'
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-md'
+                    : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border-emerald-200'
+                }`}
+              >
+                <Banknote className="h-4 w-4" />
+                <span>Cash Sales (নগদ বিক্রি)</span>
+              </button>
+              <button
+                onClick={() => setPaymentType('installment')}
+                className={`px-4 py-2 text-sm font-bold rounded-xl transition-all border flex items-center gap-1.5 ${
+                  paymentType === 'installment'
+                    ? 'bg-purple-600 text-white border-purple-600 shadow-md'
+                    : 'bg-purple-50 text-purple-800 hover:bg-purple-100 border-purple-200'
+                }`}
+              >
+                <Clock className="h-4 w-4" />
+                <span>Installment Sales (কিস্তি বিক্রি)</span>
+              </button>
+            </div>
+          </div>
+
           {/* Quick Date Filters */}
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-wrap gap-2 pt-3 border-t">
             <button
               onClick={handleTodayClick}
               className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all font-semibold text-sm shadow-md"
@@ -214,7 +269,7 @@ const SalesReport = () => {
           </div>
 
           {/* Category Filter */}
-          <div className="mt-4 flex items-center space-x-3">
+          <div className="mt-4 flex items-center space-x-3 pt-3 border-t">
             <Filter className="h-5 w-5 text-gray-400" />
             <select
               value={filterCategory}
@@ -261,44 +316,65 @@ const SalesReport = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl p-6 text-white shadow-lg">
+            {/* Summary Cards Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              {/* Total Sales */}
+              <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-6 text-white shadow-lg">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-green-100 text-sm font-medium">Total Sales Value</p>
-                  <DollarSign className="h-6 w-6 text-green-200" />
+                  <p className="text-blue-100 text-sm font-semibold">Total Sales Value</p>
+                  <DollarSign className="h-6 w-6 text-blue-200" />
                 </div>
-                <p className="text-4xl font-bold">৳{salesData.summary.totalSalesValue.toLocaleString()}</p>
+                <p className="text-4xl font-extrabold">৳{summary.totalSalesValue.toLocaleString()}</p>
+                <p className="text-xs text-blue-100 mt-1">Total {summary.totalQuantitySold} units sold</p>
               </div>
 
-              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-6 text-white shadow-lg">
+              {/* Cash Sales Card */}
+              <div className="bg-gradient-to-br from-emerald-600 to-green-700 rounded-2xl p-6 text-white shadow-lg">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-blue-100 text-sm font-medium">Products Sold</p>
-                  <Package className="h-6 w-6 text-blue-200" />
+                  <p className="text-emerald-100 text-sm font-semibold">💵 Cash Sales (নগদ বিক্রি)</p>
+                  <Banknote className="h-6 w-6 text-emerald-200" />
                 </div>
-                <p className="text-4xl font-bold">{salesData.summary.totalProductsSold}</p>
-                <p className="text-xs text-blue-100 mt-1">Unique products</p>
+                <p className="text-4xl font-extrabold">৳{summary.totalCashSalesValue.toLocaleString()}</p>
+                <p className="text-xs text-emerald-100 mt-1">
+                  {summary.totalCashQuantity} units ({summary.totalCashTransactions} Cash Sales)
+                </p>
               </div>
 
-              <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-6 text-white shadow-lg">
+              {/* Installment Sales Card */}
+              <div className="bg-gradient-to-br from-purple-600 to-indigo-700 rounded-2xl p-6 text-white shadow-lg">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-purple-100 text-sm font-medium">Total Quantity</p>
-                  <TrendingUp className="h-6 w-6 text-purple-200" />
+                  <p className="text-purple-100 text-sm font-semibold">📅 Installment (কিস্তি বিক্রি)</p>
+                  <Clock className="h-6 w-6 text-purple-200" />
                 </div>
-                <p className="text-4xl font-bold">{salesData.summary.totalQuantitySold}</p>
-                <p className="text-xs text-purple-100 mt-1">Units sold</p>
+                <p className="text-4xl font-extrabold">৳{summary.totalInstallmentSalesValue.toLocaleString()}</p>
+                <p className="text-xs text-purple-100 mt-1">
+                  {summary.totalInstallmentQuantity} units ({summary.totalInstallmentTransactions} Installment Sales)
+                </p>
+              </div>
+
+              {/* Unique Products Card */}
+              <div className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl p-6 text-white shadow-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-amber-100 text-sm font-semibold">Unique Products</p>
+                  <Package className="h-6 w-6 text-amber-200" />
+                </div>
+                <p className="text-4xl font-extrabold">{summary.totalProductsSold}</p>
+                <p className="text-xs text-amber-100 mt-1">Different product models</p>
               </div>
             </div>
 
             {/* Products Table */}
             <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
-              <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-                <h2 className="text-2xl font-bold text-gray-900 flex items-center">
-                  <Package className="h-6 w-6 mr-2 text-blue-600" />
-                  Product-wise Sales Details
-                </h2>
-                <p className="text-sm text-gray-600 mt-1">
-                  Showing {filteredProducts.length} of {salesData.productSales.length} products
-                </p>
+              <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+                    <Package className="h-6 w-6 mr-2 text-blue-600" />
+                    Product-wise Sales Details (পণ্যভিত্তিক বিক্রয় বিবরণী)
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Showing {filteredProducts.length} of {salesData.productSales.length} products
+                  </p>
+                </div>
               </div>
 
               <div className="overflow-x-auto">
@@ -312,22 +388,22 @@ const SalesReport = () => {
                         Category
                       </th>
                       <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">
-                        Quantity Sold
+                        Payment Breakdown (নগদ vs কিস্তি)
+                      </th>
+                      <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">
+                        Total Quantity
                       </th>
                       <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">
                         Unit Price
                       </th>
                       <th className="px-6 py-4 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">
-                        Total Value
-                      </th>
-                      <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">
-                        Transactions
+                        Total Sales Value
                       </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {filteredProducts.length > 0 ? (
-                      filteredProducts.map((product, index) => (
+                      filteredProducts.map((product) => (
                         <tr key={product.productId} className="hover:bg-blue-50 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center">
@@ -345,6 +421,26 @@ const SalesReport = () => {
                               {product.category}
                             </span>
                           </td>
+                          
+                          {/* Payment Breakdown (Cash vs Installment) */}
+                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                            <div className="flex flex-col items-center gap-1">
+                              {product.cashQuantity > 0 && (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                  💵 নগদ (Cash): {product.cashQuantity} {product.unit} (৳{product.cashValue.toLocaleString()})
+                                </span>
+                              )}
+                              {product.installmentQuantity > 0 && (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-purple-100 text-purple-800 border border-purple-300">
+                                  📅 কিস্তি (Installment): {product.installmentQuantity} {product.unit} (৳{product.installmentValue.toLocaleString()})
+                                </span>
+                              )}
+                              {product.cashQuantity === 0 && product.installmentQuantity === 0 && (
+                                <span className="text-xs text-gray-400">N/A</span>
+                              )}
+                            </div>
+                          </td>
+
                           <td className="px-6 py-4 whitespace-nowrap text-center">
                             <div className="text-lg font-bold text-gray-900">
                               {product.totalQuantity} <span className="text-sm font-medium text-gray-500">{product.unit}</span>
@@ -356,14 +452,9 @@ const SalesReport = () => {
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right">
-                            <div className="text-lg font-bold text-green-600">
+                            <div className="text-lg font-extrabold text-green-600">
                               ৳{product.totalValue.toLocaleString()}
                             </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-center">
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700">
-                              {product.transactions}
-                            </span>
                           </td>
                         </tr>
                       ))
@@ -371,15 +462,9 @@ const SalesReport = () => {
                       <tr>
                         <td colSpan="6" className="px-6 py-12 text-center">
                           <Package className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                          <p className="text-gray-500 text-lg font-medium">No sales found for this date</p>
+                          <p className="text-gray-500 text-lg font-medium">No sales found for this filter</p>
                           <p className="text-gray-400 text-sm mt-2">
-                            {filterCategory !== 'all' 
-                              ? 'Try selecting a different category or date'
-                              : 'No product distributions were made on this date'
-                            }
-                          </p>
-                          <p className="text-gray-400 text-xs mt-2 italic">
-                            💡 Sales data comes from completed product distributions
+                            Try selecting a different date range, payment mode, or category.
                           </p>
                         </td>
                       </tr>
