@@ -263,6 +263,68 @@ router.get('/database/backup', protect, authorize('admin', 'manager'), async (re
     }
 });
 
+// Helper function to sanitize documents before insertion
+function sanitizeDoc(doc) {
+    if (!doc || typeof doc !== 'object') return doc;
+    const clean = { ...doc };
+    delete clean.__v;
+
+    // Convert _id if Extended JSON $oid
+    if (clean._id && typeof clean._id === 'object' && clean._id.$oid) {
+        clean._id = clean._id.$oid;
+    }
+
+    for (const [prop, value] of Object.entries(clean)) {
+        if (value === null || value === undefined) continue;
+
+        // Extended JSON $oid
+        if (typeof value === 'object' && value.$oid) {
+            clean[prop] = value.$oid;
+        }
+        // Extended JSON $date
+        else if (typeof value === 'object' && value.$date) {
+            clean[prop] = new Date(value.$date);
+        }
+        // Populated Object with _id (e.g. collector: { _id: "...", name: "..." })
+        else if (
+            typeof value === 'object' &&
+            !(value instanceof Date) &&
+            !Array.isArray(value) &&
+            value._id
+        ) {
+            clean[prop] = typeof value._id === 'object' && value._id.$oid ? value._id.$oid : value._id;
+        }
+        // Convert ISO date strings to Date objects
+        else if (
+            typeof value === 'string' &&
+            (prop.endsWith('Date') || prop.endsWith('At') || prop === 'lastLogin') &&
+            /^\d{4}-\d{2}-\d{2}T/.test(value)
+        ) {
+            const parsedDate = new Date(value);
+            if (!isNaN(parsedDate.getTime())) {
+                clean[prop] = parsedDate;
+            }
+        }
+    }
+
+    return clean;
+}
+
+// Helper to get collection array flexibly from backup JSON
+function getCollectionData(collections, targetKey) {
+    if (!collections || typeof collections !== 'object') return [];
+    if (Array.isArray(collections[targetKey])) return collections[targetKey];
+
+    const normalizedTarget = targetKey.toLowerCase().replace(/[^a-z0-9]/g, '');
+    for (const [k, val] of Object.entries(collections)) {
+        const normalizedK = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (normalizedK === normalizedTarget && Array.isArray(val)) {
+            return val;
+        }
+    }
+    return [];
+}
+
 // @desc    Restore database backup from uploaded JSON file
 // @route   POST /api/admin/database/restore
 // @access  Private/Admin
@@ -292,37 +354,44 @@ router.post('/database/restore', protect, authorize('admin', 'manager'), async (
         };
 
         const restoreSummary = {};
+        const bcrypt = require('bcryptjs');
 
         // Loop over each collection and restore
         for (const [key, Model] of Object.entries(models)) {
-            const docs = backupData.collections[key];
-            if (!Array.isArray(docs)) {
-                console.warn(`⚠️ Collection ${key} data is missing or not an array in backup`);
-                continue;
-            }
+            const docs = getCollectionData(backupData.collections, key);
 
-            // 1. Delete all existing documents in this collection
-            await Model.deleteMany({});
-            console.log(`   🗑️ Cleared collection: ${key}`);
+            try {
+                // Delete existing collection
+                await Model.deleteMany({});
+                console.log(`   🗑️ Cleared collection: ${key}`);
 
-            // 2. Insert documents if array is not empty
-            if (docs.length > 0) {
-                const docsToInsert = await Promise.all(docs.map(async doc => {
-                    const cleanDoc = { ...doc };
-                    delete cleanDoc.__v;
-                    // If this is the users collection and password is missing (old backup)
-                    if (key === 'users' && !cleanDoc.password) {
-                        const bcrypt = require('bcryptjs');
-                        const salt = await bcrypt.genSalt(12);
-                        cleanDoc.password = await bcrypt.hash('112233', salt);
+                if (docs && docs.length > 0) {
+                    const docsToInsert = await Promise.all(docs.map(async doc => {
+                        const cleanDoc = sanitizeDoc(doc);
+
+                        // If user collection and password missing, add fallback
+                        if (key === 'users' && !cleanDoc.password) {
+                            const salt = await bcrypt.genSalt(12);
+                            cleanDoc.password = await bcrypt.hash('112233', salt);
+                        }
+                        return cleanDoc;
+                    }));
+
+                    try {
+                        await Model.insertMany(docsToInsert, { ordered: false, validateBeforeSave: false });
+                    } catch (bulkError) {
+                        console.warn(`   ⚠️ Partial bulk insert note for ${key}:`, bulkError.message);
                     }
-                    return cleanDoc;
-                }));
-                await Model.insertMany(docsToInsert);
-                console.log(`   ✅ Restored ${docsToInsert.length} documents into ${key}`);
-                restoreSummary[key] = docsToInsert.length;
-            } else {
-                restoreSummary[key] = 0;
+
+                    const countAfter = await Model.countDocuments();
+                    console.log(`   ✅ Restored ${countAfter} documents into ${key}`);
+                    restoreSummary[key] = countAfter;
+                } else {
+                    restoreSummary[key] = 0;
+                }
+            } catch (collError) {
+                console.error(`   ❌ Failed restoring collection ${key}:`, collError.message);
+                restoreSummary[key] = `Error: ${collError.message}`;
             }
         }
 
@@ -335,7 +404,7 @@ router.post('/database/restore', protect, authorize('admin', 'manager'), async (
         console.error('❌ Database restore failed:', error);
         res.status(500).json({
             success: false,
-            message: 'Database restore failed',
+            message: 'Database restore failed: ' + error.message,
             error: error.message
         });
     }
