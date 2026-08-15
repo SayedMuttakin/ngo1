@@ -268,18 +268,22 @@ const MemberProfile = () => {
                 <img
                   src={getImageUrl(member.profileImage)}
                   alt={member.name}
-                  className="w-24 h-32 rounded-lg object-cover border-3 border-blue-300"
+                  className="w-24 h-32 rounded-lg object-cover border-2 border-blue-200"
                   style={{ objectPosition: 'center top' }}
                   onError={(e) => {
-                    console.error('Error loading image:', e.target.src);
-                    e.target.src = 'https://via.placeholder.com/150?text=No+Image';
+                    e.target.onerror = null;
+                    e.target.style.display = 'none';
+                    if (e.target.nextElementSibling) {
+                      e.target.nextElementSibling.style.display = 'flex';
+                    }
                   }}
                 />
-              ) : (
-                <div className="w-24 h-32 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <User className="h-12 w-12 text-blue-600" />
-                </div>
-              )}
+              ) : null}
+              <div
+                className={`w-24 h-32 bg-blue-100 rounded-lg items-center justify-center ${member.profileImage ? 'hidden' : 'flex'}`}
+              >
+                <User className="h-12 w-12 text-blue-600" />
+              </div>
             </div>
             <div className="flex-1">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">{member.name}</h2>
@@ -831,21 +835,6 @@ const MemberProfile = () => {
                                 {savingsRows}
                               </tbody>
                             </table>
-
-                            {/* Info note for completed products with negative balance */}
-                            {isProductCompleted && savingsBalance < 0 && (
-                              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                <div className="flex items-start gap-2 text-sm text-blue-800">
-                                  <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                                  <div>
-                                    <strong>ℹ️ Completed Product:</strong> This product's loan is fully paid.
-                                    Historical transactions shown above. Any remaining positive balance has been
-                                    transferred to active products. Negative balance indicates withdrawals were
-                                    made using transferred savings from other products.
-                                  </div>
-                                </div>
-                              </div>
-                            )}
                           </div>
                         ) : (
                           <div className="text-center py-12 text-gray-500 border border-gray-200 rounded-lg bg-gray-50">
