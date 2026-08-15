@@ -283,7 +283,7 @@ const MemberProfile = () => {
             </div>
             <div className="flex-1">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">{member.name}</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="flex items-start space-x-3">
                   <Phone className="h-5 w-5 text-gray-400 mt-0.5" />
                   <div>
@@ -305,6 +305,13 @@ const MemberProfile = () => {
                     <p className="font-medium text-gray-900">
                       {member.joinDate ? new Date(member.joinDate).toLocaleDateString('en-US') : 'N/A'}
                     </p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3 bg-green-50 p-2.5 rounded-xl border border-green-200">
+                  <PiggyBank className="h-6 w-6 text-green-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold text-green-800 uppercase">Total Savings (মোট সঞ্চয়)</p>
+                    <p className="text-xl font-black text-green-700">৳{(member.totalSavings || 0).toLocaleString()}</p>
                   </div>
                 </div>
                 <div className="flex items-start space-x-3">
@@ -681,361 +688,59 @@ const MemberProfile = () => {
                     });
                 }
 
-                // 🎯 NEW APPROACH: Match NewCollectInstallmentForm logic
-                // Group savings by distributionId and display them clearly
-
-                // Get all valid savings records
+                // 🎯 Complete Member Savings History
                 const allValidSavingsRecords = savingsData.filter(record => {
                   if (!(record.installmentType === 'extra' || record.installmentType === 'savings')) return false;
                   if (!record.note) return false;
 
-                  const isSavingsCollection = record.note.includes('Savings Collection');
-                  const isSavingsWithdrawal = record.note.includes('Savings Withdrawal');
-                  const isInitialSavings = record.note.includes('Initial Savings');
+                  const isSavings = record.note.toLowerCase().includes('savings');
+                  const isWithdrawal = record.note.toLowerCase().includes('withdrawal');
                   const isProductSaleRecord = record.note.match(/Product Sale:.+\(Qty:.+\|/);
 
-                  return (isSavingsCollection || isSavingsWithdrawal || isInitialSavings) && !isProductSaleRecord;
+                  return (isSavings || isWithdrawal || record.installmentType === 'savings') && !isProductSaleRecord;
+                }).sort((a, b) => new Date(a.collectionDate || a.dueDate || a.createdAt) - new Date(b.collectionDate || b.dueDate || b.createdAt));
+
+                console.log('💰 Total valid savings records found for member:', allValidSavingsRecords.length);
+
+                // Calculate total recorded savings
+                let recordedSavingsTotal = 0;
+                allValidSavingsRecords.forEach(sav => {
+                  const isWithdrawal = sav.note?.toLowerCase().includes('withdrawal');
+                  const amount = sav.paidAmount || sav.amount || 0;
+                  recordedSavingsTotal += isWithdrawal ? -amount : amount;
                 });
 
-                console.log('💰 Total valid savings records found:', allValidSavingsRecords.length);
+                const memberTotalSavings = member?.totalSavings || 0;
+                const initialUnrecordedSavings = Math.max(0, memberTotalSavings - recordedSavingsTotal);
 
-                // 🔍 DEBUG: Show ALL valid savings records with details
-                console.log('🔍 ALL Valid Savings Records:');
-                allValidSavingsRecords.forEach((record, idx) => {
-                  const amount = record.paidAmount || record.amount || 0;
-                  const distId = record.distributionId ? `SALE-${record.distributionId.toString().slice(-6)}` : 'NO_DIST_ID';
-                  const instId = record.installmentId ? record.installmentId.toString().slice(-6) : 'NO_INST_ID';
-                  console.log(`   [${idx + 1}] ৳${amount} | DistID: ${distId} | InstID: ${instId} | Note: ${record.note?.substring(0, 60)}`);
-                });
-
-                // Calculate savings for the SELECTED product by distributionId
-                let productSavings = [];
-
-                // Match savings by distributionId (most reliable)
-                const matchedSavings = allValidSavingsRecords.filter(record => {
-                  // Direct match by distributionId
-                  if (record.distributionId && record.distributionId.toString() === selectedLoan) {
-                    console.log(`   ✅ Direct match by distributionId: ${record.note?.substring(0, 50)}`);
-                    return true;
-                  }
-
-                  // Match by installmentId
-                  if (record.installmentId) {
-                    const belongsToProduct = allProductInstallments.some(inst => inst._id === record.installmentId);
-                    if (belongsToProduct) {
-                      console.log(`   ✅ Match by installmentId: ${record.note?.substring(0, 50)}`);
-                      return true;
-                    }
-                  }
-
-                  return false;
-                });
-
-                productSavings.push(...matchedSavings);
-                console.log(`💰 Found ${matchedSavings.length} direct savings for product ${selectedLoan.slice(-6)}`);
-
-                // Get current product info
-                const currentProduct = uniqueLoans.find(loan => loan.id === selectedLoan);
-                const currentProductName = currentProduct?.productName || '';
-                const selectedProductIndex = uniqueLoans.findIndex(l => l.id === selectedLoan);
-
-                // 🎯 NEW: If this is the FIRST product (index 0), include Initial Savings
-                // Initial Savings have no distributionId because they're collected during member registration
-                if (selectedProductIndex === 0) {
-                  const initialSavings = allValidSavingsRecords.filter(record => {
-                    // Skip if already matched
-                    if (productSavings.some(p => p._id === record._id)) return false;
-
-                    // Check if this is Initial Savings (no distributionId)
-                    const isInitialSavings = !record.distributionId && record.note?.includes('Initial Savings');
-
-                    if (isInitialSavings) {
-                      console.log(`   💎 Initial Savings (added to 1st product): ${record.note?.substring(0, 50)}`);
-                      return true;
-                    }
-
-                    return false;
-                  });
-
-                  productSavings.push(...initialSavings);
-                  console.log(`💎 Added ${initialSavings.length} Initial Savings to first product`);
-                }
-
-                // Check if this product is completed (for display purposes)
-                const isProductCompleted = isProductFullyPaid(selectedLoan);
-
-                // 🎯 NEW: For COMPLETED products, include savings from ALL previous completed products
-                // This shows the complete savings state when this product was active
-                if (isProductCompleted && selectedProductIndex > 0) {
-                  console.log(`🔍 Checking for previous completed products' savings to include...`);
-
-                  // Get all products before this one (chronologically)
-                  const previousProducts = uniqueLoans.slice(0, selectedProductIndex);
-
-                  previousProducts.forEach((prevProduct, idx) => {
-                    // Check if this previous product is also completed
-                    const isPrevCompleted = isProductFullyPaid(prevProduct.id);
-
-                    if (isPrevCompleted) {
-                      console.log(`   📦 Previous completed product [${idx}]: ${prevProduct.productName}`);
-
-                      // Get all savings from this previous completed product
-                      const prevProductSavings = allValidSavingsRecords.filter(record => {
-                        // Skip if already in productSavings
-                        if (productSavings.some(p => p._id === record._id)) return false;
-
-                        // Match by distributionId
-                        if (record.distributionId && record.distributionId.toString() === prevProduct.id) {
-                          return true;
-                        }
-
-                        // Match by installmentId
-                        const prevProductInstallments = loanHistory.filter(inst =>
-                          inst.distributionId?.toString() === prevProduct.id &&
-                          inst.note?.includes('Product Loan:')
-                        );
-
-                        if (record.installmentId && prevProductInstallments.some(inst => inst._id === record.installmentId)) {
-                          return true;
-                        }
-
-                        // Include Initial Savings if this is the first product
-                        if (idx === 0 && !record.distributionId && record.note?.includes('Initial Savings')) {
-                          return true;
-                        }
-
-                        return false;
-                      });
-
-                      if (prevProductSavings.length > 0) {
-                        productSavings.push(...prevProductSavings);
-                        console.log(`      ➕ Added ${prevProductSavings.length} savings from completed product: ${prevProduct.productName}`);
-                      }
-                    }
-                  });
-
-                  console.log(`💰 Total savings after including previous completed products: ${productSavings.length}`);
-                }
-
-                // 🎯 CRITICAL: Find the FIRST ACTIVE product (not just index 0)
-                // Completed products should transfer their savings to the first ACTIVE product
-                const activeProducts = uniqueLoans.filter(loan => !isProductFullyPaid(loan.id));
-                const firstActiveProduct = activeProducts.length > 0 ? activeProducts[0] : null;
-                const isFirstActiveProduct = firstActiveProduct && firstActiveProduct.id === selectedLoan;
-
-                console.log(`   Current Product: ${currentProductName}, Index: ${selectedProductIndex}`);
-                console.log(`   Is First Active Product: ${isFirstActiveProduct}`);
-                console.log(`   First Active Product: ${firstActiveProduct?.productName || 'None'}`)
-
-                // 🐛 DEBUG: Show all products and their completion status
-                console.log('🐛 DEBUG - All products status:');
-                uniqueLoans.forEach((loan, idx) => {
-                  const isCompleted = isProductFullyPaid(loan.id);
-                  console.log(`   [${idx}] ${loan.productName}: ${isCompleted ? '✅ COMPLETED' : '❌ ACTIVE (incomplete)'}`);
-                });
-                console.log(`🐛 DEBUG - Active products: ${activeProducts.map(p => p.productName).join(', ')}`);
-                console.log(`🐛 DEBUG - First active product: ${firstActiveProduct?.productName || 'None'}`);
-
-                // 🎯 CRITICAL: If this is the FIRST ACTIVE product, add all unmatched savings AND completed products' savings
-                if (isFirstActiveProduct) {
-                  console.log('   💡 This is First Active Product - adding unmatched savings...');
-
-                  // Get savings that DON'T match any other ACTIVE product OR the current product
-                  // 🔥 NEW: We should NOT take savings from ANY active products (even current one)
-                  // Savings should only transfer from COMPLETED products
-                  const unmatchedSavings = allValidSavingsRecords.filter(record => {
-                    // Skip if already in productSavings
-                    if (productSavings.some(p => p._id === record._id)) return false;
-
-                    // 🎯 CRITICAL: Check if this savings belongs to ANY active (incomplete) product
-                    const belongsToActiveProduct = activeProducts.some((activeLoan) => {
-                      // Match by distributionId
-                      if (record.distributionId && record.distributionId.toString() === activeLoan.id) {
-                        console.log(`      ⛔ Skipping - belongs to active product: ${activeLoan.productName}`);
-                        return true;
-                      }
-
-                      // Match by installmentId
-                      const activeProductInstallments = loanHistory.filter(inst =>
-                        inst.distributionId?.toString() === activeLoan.id &&
-                        inst.note?.includes('Product Loan:')
-                      );
-
-                      if (record.installmentId && activeProductInstallments.some(inst => inst._id === record.installmentId)) {
-                        console.log(`      ⛔ Skipping - belongs to active product: ${activeLoan.productName}`);
-                        return true;
-                      }
-
-                      return false;
-                    });
-
-                    // Include only if it doesn't belong to any active product
-                    if (!belongsToActiveProduct) {
-                      console.log(`      ➕ Unmatched savings (not from any active product): ${record.note?.substring(0, 50)}`);
-                      return true;
-                    }
-
-                    return false;
-                  });
-
-                  productSavings.push(...unmatchedSavings);
-                  console.log(`   💡 Added ${unmatchedSavings.length} unmatched savings to First Active Product`);
-
-                  // 🎯 SAVINGS TRANSFER: Add savings from ALL completed products
-                  const completedProducts = uniqueLoans.filter(loan => isProductFullyPaid(loan.id));
-
-                  console.log(`   💡 Found ${completedProducts.length} completed products for transfer`);
-
-                  completedProducts.forEach(completedLoan => {
-                    const completedProductSavings = allValidSavingsRecords.filter(record => {
-                      // Skip if already in productSavings
-                      if (productSavings.some(p => p._id === record._id)) return false;
-
-                      // Match by distributionId
-                      if (record.distributionId && record.distributionId.toString() === completedLoan.id) {
-                        console.log(`         ✅ Match by distributionId for ${completedLoan.productName}`);
-                        return true;
-                      }
-
-                      // Match by installmentId
-                      const completedInstallments = loanHistory.filter(inst =>
-                        inst.distributionId?.toString() === completedLoan.id
-                      );
-
-                      if (record.installmentId && completedInstallments.some(inst => inst._id === record.installmentId)) {
-                        console.log(`         ✅ Match by installmentId for ${completedLoan.productName}`);
-                        return true;
-                      }
-
-                      // Match by product name (fallback for old records without distributionId)
-                      if (!record.distributionId && record.note && completedLoan.productName) {
-                        if (record.note.includes(completedLoan.productName)) {
-                          console.log(`         ✅ Match by name for ${completedLoan.productName}`);
-                          return true;
-                        }
-                      }
-
-                      return false;
-                    });
-
-                    if (completedProductSavings.length > 0) {
-                      console.log(`      ➡️ Transferring ${completedProductSavings.length} savings from completed: ${completedLoan.productName}`);
-                      productSavings.push(...completedProductSavings);
-                    } else {
-                      console.log(`      ⚠️ No savings found for completed product: ${completedLoan.productName}`);
-                    }
-                  });
-                }
-
-                console.log(`💰 Total savings for ${currentProductName}: ${productSavings.length} records`);
-
-                // 🎯 Separate savings into "Direct" vs "Inherited/Transferred"
-                // Direct = belongs to THIS product (by distributionId or installmentId)
-                // Inherited = from completed products or unmatched (shown as Opening Balance)
-
-                const directSavings = [];
-                const inheritedSavings = [];
-
-                productSavings.forEach(sav => {
-                  // Check if this savings DIRECTLY belongs to current product
-                  const isDirect =
-                    (sav.distributionId && sav.distributionId.toString() === selectedLoan) ||
-                    (sav.installmentId && allProductInstallments.some(inst => inst._id === sav.installmentId));
-
-                  if (isDirect) {
-                    directSavings.push(sav);
-                  } else {
-                    inheritedSavings.push(sav);
-                  }
-                });
-
-                console.log(`💡 Direct savings: ${directSavings.length}, Inherited/Transferred: ${inheritedSavings.length}`);
-
-                // 🎯 CRITICAL FIX: For COMPLETED products, use matchedSavings (historical snapshot)
-                // For ACTIVE products, use directSavings (current state)
-                let savingsToDisplay = [];
-
-                if (isProductCompleted) {
-                  // For completed products, show ALL productSavings (includes previous completed products' savings)
-                  // This shows the complete savings state when this product was active/completed
-                  savingsToDisplay = productSavings.sort((a, b) =>
-                    new Date(a.collectionDate || a.dueDate) - new Date(b.collectionDate || b.dueDate)
-                  );
-                  console.log(`📸 COMPLETED Product - Showing historical snapshot: ${savingsToDisplay.length} savings records`);
-                } else {
-                  // For active products, use productSavings filtered for direct transactions
-                  // This ensures Initial Savings are included (they're in productSavings but not in directSavings)
-                  savingsToDisplay = productSavings.filter(sav => {
-                    // Include direct savings for this product
-                    return (sav.distributionId && sav.distributionId.toString() === selectedLoan) ||
-                      (sav.installmentId && allProductInstallments.some(inst => inst._id === sav.installmentId)) ||
-                      (!sav.distributionId && sav.note?.includes('Initial Savings') && selectedProductIndex === 0);
-                  }).sort((a, b) =>
-                    new Date(a.collectionDate || a.dueDate) - new Date(b.collectionDate || b.dueDate)
-                  );
-                  console.log(`🔴 ACTIVE Product - Showing direct savings: ${savingsToDisplay.length} savings records (includes Initial Savings if first product)`);
-                }
-
-                // Calculate opening balance from inherited/previous savings
-                let openingBalance = 0;
-
-                // For both COMPLETED and ACTIVE products, calculate transferred balance from previous products
-                if (selectedProductIndex > 0 || inheritedSavings.length > 0) {
-                  // Get all savings from productSavings that are NOT direct to this product
-                  const transferredSavings = productSavings.filter(sav => {
-                    const isDirect =
-                      (sav.distributionId && sav.distributionId.toString() === selectedLoan) ||
-                      (sav.installmentId && allProductInstallments.some(inst => inst._id === sav.installmentId)) ||
-                      (!sav.distributionId && sav.note?.includes('Initial Savings') && selectedProductIndex === 0);
-                    return !isDirect; // Return savings that are NOT direct
-                  });
-
-                  transferredSavings.forEach(sav => {
-                    const isWithdrawal = sav.note?.toLowerCase().includes('withdrawal');
-                    const amount = sav.paidAmount || sav.amount || 0;
-                    openingBalance += isWithdrawal ? -amount : amount;
-                  });
-
-                  console.log(`💰 Opening balance from transferred savings: ৳${openingBalance} (${transferredSavings.length} previous transactions)`);
-
-                  // For completed products, update savingsToDisplay to show only direct savings
-                  if (isProductCompleted && openingBalance !== 0) {
-                    // Filter to show only THIS product's direct savings
-                    savingsToDisplay = productSavings.filter(sav => {
-                      return (sav.distributionId && sav.distributionId.toString() === selectedLoan) ||
-                        (sav.installmentId && allProductInstallments.some(inst => inst._id === sav.installmentId)) ||
-                        (!sav.distributionId && sav.note?.includes('Initial Savings') && selectedProductIndex === 0);
-                    }).sort((a, b) =>
-                      new Date(a.collectionDate || a.dueDate) - new Date(b.collectionDate || b.dueDate)
-                    );
-                    console.log(`   🔧 Filtered to show only direct savings: ${savingsToDisplay.length} records (opening balance will be shown separately)`);
-                  }
-                }
-
-                // Build savings rows
                 const savingsRows = [];
-                let savingsBalance = openingBalance;
+                let savingsBalance = 0;
 
-                // Add Opening Balance row if there is transferred savings (for BOTH active and completed products)
-                if (openingBalance !== 0) {
+                // 1. Initial / Opening balance row if member has unrecorded initial savings
+                if (initialUnrecordedSavings > 0) {
+                  savingsBalance += initialUnrecordedSavings;
+                  const joinDateStr = member?.joinDate ? new Date(member.joinDate).toLocaleDateString('en-GB') : '-';
+
                   savingsRows.push(
-                    <tr key="opening-balance" className="bg-blue-50 hover:bg-blue-100 transition-colors">
-                      <td className="px-3 py-3 text-sm font-bold text-gray-900 border border-gray-800">-</td>
-                      <td className="px-3 py-3 text-sm text-right font-medium text-gray-900 border border-gray-800">-</td>
-                      <td className="px-3 py-3 text-sm text-right font-medium text-gray-900 border border-gray-800">-</td>
+                    <tr key="initial-savings-row" className="bg-blue-50 hover:bg-blue-100 transition-colors">
+                      <td className="px-3 py-3 text-sm font-medium text-gray-900 border border-gray-800">{joinDateStr}</td>
+                      <td className="px-3 py-3 text-sm text-right font-semibold text-green-600 border border-gray-800">
+                        ৳{initialUnrecordedSavings.toLocaleString()}
+                      </td>
+                      <td className="px-3 py-3 text-sm text-right font-medium text-gray-400 border border-gray-800">-</td>
                       <td className="px-3 py-3 text-sm text-right font-bold text-blue-600 border border-gray-800">
-                        ৳{openingBalance.toLocaleString()}
+                        ৳{savingsBalance.toLocaleString()}
                       </td>
                       <td className="px-3 py-3 text-sm text-gray-700 border border-gray-800">
-                        Opening Balance (Transferred)
+                        Initial Savings (প্রারম্ভিক সঞ্চয়)
                       </td>
                     </tr>
                   );
                 }
 
-                // Add savings transaction rows (using savingsToDisplay)
-                savingsToDisplay.forEach((sav, index) => {
-                  const date = new Date(sav.collectionDate || sav.dueDate);
+                // 2. Add all recorded savings transactions
+                allValidSavingsRecords.forEach((sav, index) => {
+                  const date = new Date(sav.collectionDate || sav.dueDate || sav.createdAt);
                   const dateStr = date.toLocaleDateString('en-GB');
                   const isWithdrawal = sav.note?.toLowerCase().includes('withdrawal');
                   const amount = sav.paidAmount || sav.amount || 0;
@@ -1044,7 +749,7 @@ const MemberProfile = () => {
                   const savingsOut = isWithdrawal ? amount : 0;
                   savingsBalance += (savingsIn - savingsOut);
 
-                  const bgColor = (index + (openingBalance !== 0 ? 1 : 0)) % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                  const bgColor = (index + (initialUnrecordedSavings > 0 ? 1 : 0)) % 2 === 0 ? 'bg-white' : 'bg-gray-50';
 
                   savingsRows.push(
                     <tr key={`sav-${sav._id || index}`} className={`${bgColor} hover:bg-blue-50 transition-colors`}>
@@ -1059,21 +764,20 @@ const MemberProfile = () => {
                         ৳{savingsBalance.toLocaleString()}
                       </td>
                       <td className="px-3 py-3 text-sm text-gray-700 border border-gray-800">
-                        {sav.collector?.name || sav.collectorName || 'N/A'}
+                        {sav.collector?.name || sav.collectorName || member?.assignedCollector?.name || 'Polas'}
                       </td>
                     </tr>
                   );
                 });
 
-                console.log(`💰 Final savings balance for ${currentProductName}: ৳${savingsBalance}`);
-
-                // 🎯 Add info message for completed products
-                if (isProductCompleted && savingsBalance !== 0) {
-                  const transferNote = savingsBalance < 0
-                    ? `Note: This product is completed. Historical transactions shown. Final savings transferred to active products.`
-                    : `Note: This product is completed. Final balance of ৳${savingsBalance.toLocaleString()} transferred to active products.`;
-
-                  console.log(`   ℹ️ ${transferNote}`);
+                if (savingsRows.length === 0) {
+                  savingsRows.push(
+                    <tr key="no-savings" className="bg-white">
+                      <td colSpan="5" className="px-3 py-4 text-center text-sm text-gray-500 border border-gray-800">
+                        No savings records found
+                      </td>
+                    </tr>
+                  );
                 }
 
 
