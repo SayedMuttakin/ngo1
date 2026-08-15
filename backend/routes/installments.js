@@ -1062,22 +1062,30 @@ router.post('/product-sale', protect, async (req, res) => {
 
         // Update product stock for this specific product
         try {
-          const productDoc = await Product.findById(product.productId);
-          if (productDoc) {
-            console.log(`📦 Updating stock for ${productDoc.name}: Available: ${productDoc.availableStock}, Selling: ${product.quantity}`);
+          let productDoc = null;
+          if (product.productId) {
+            productDoc = await Product.findById(product.productId);
+          }
+          if (!productDoc && product.productName) {
+            const cleanName = product.productName.replace(/\s*\(Qty:.+$/, '').trim();
+            productDoc = await Product.findOne({ name: { $regex: new RegExp(`^${cleanName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') } });
+          }
 
-            // Update stock quantities
+          if (productDoc) {
+            const qtyToDeduct = parseFloat(product.quantity) || 1;
+            console.log(`📦 Updating stock for ${productDoc.name}: Available: ${productDoc.availableStock}, Selling: ${qtyToDeduct}`);
+
             const oldAvailable = productDoc.availableStock || 0;
             const oldDistributed = productDoc.distributedStock || 0;
 
-            productDoc.availableStock = Math.max(0, oldAvailable - product.quantity);
-            productDoc.distributedStock = oldDistributed + product.quantity;
+            productDoc.availableStock = Math.max(0, oldAvailable - qtyToDeduct);
+            productDoc.distributedStock = oldDistributed + qtyToDeduct;
 
             await productDoc.save();
 
             console.log(`✅ Updated ${productDoc.name} stock: Available: ${oldAvailable} → ${productDoc.availableStock}, Distributed: ${oldDistributed} → ${productDoc.distributedStock}`);
           } else {
-            console.log(`❌ Product not found: ${product.productId}`);
+            console.log(`❌ Product not found for ID: ${product.productId}, Name: ${product.productName}`);
           }
         } catch (stockError) {
           console.error('❌ Error updating product stock:', stockError);
@@ -1139,6 +1147,25 @@ router.post('/product-sale', protect, async (req, res) => {
         });
       } catch (historyError) {
         console.error('❌ Error creating CollectionHistory for custom product sale:', historyError);
+      }
+
+      // Update custom product stock if it exists in database
+      try {
+        const cleanName = customProductName.replace(/\s*\(Qty:.+$/, '').trim();
+        const productDoc = await Product.findOne({ name: { $regex: new RegExp(`^${cleanName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') } });
+        if (productDoc) {
+          const qtyToDeduct = 1;
+          const oldAvailable = productDoc.availableStock || 0;
+          const oldDistributed = productDoc.distributedStock || 0;
+
+          productDoc.availableStock = Math.max(0, oldAvailable - qtyToDeduct);
+          productDoc.distributedStock = oldDistributed + qtyToDeduct;
+
+          await productDoc.save();
+          console.log(`✅ Updated custom product ${productDoc.name} stock: Available: ${oldAvailable} → ${productDoc.availableStock}`);
+        }
+      } catch (stockError) {
+        console.error('❌ Error updating custom product stock:', stockError);
       }
     }
 
@@ -1816,49 +1843,45 @@ router.post('/collect', protect, validateInstallmentCollection, async (req, res)
       try {
         console.log('🔍 Detected product sale, processing note:', note);
 
-        // Extract product name from note
-        const productMatch = note.match(/Product Sale: ([^|]+)/);
-        if (productMatch) {
-          const productName = productMatch[1].trim();
+        // Extract product name from note: "Product Sale: ProductName (Qty: 2 piece, ৳25400) | ..."
+        const nameMatch = note.match(/Product Sale:\s*(.+?)(?:\s*\(Qty:|\s*\||$)/i);
+        if (nameMatch && nameMatch[1]) {
+          const productName = nameMatch[1].trim();
           console.log('🏷️ Extracted product name:', productName);
 
           // Extract quantity from note
-          const quantityMatch = note.match(/Qty: (\d+(?:\.\d+)?)\s*(\w+)/);
-          if (quantityMatch) {
-            const quantity = parseFloat(quantityMatch[1]);
-            const unit = quantityMatch[2];
-            console.log('📊 Extracted quantity:', quantity, unit);
+          const quantityMatch = note.match(/Qty:\s*([\d.]+)/i);
+          const quantity = quantityMatch ? parseFloat(quantityMatch[1]) : 1;
+          console.log('📊 Extracted quantity:', quantity);
 
-            // Find and update product
-            const product = await Product.findOne({ name: productName });
-            if (product) {
-              console.log('📦 Found product:', product.name, 'Current stock:', product.availableStock, 'Distributed:', product.distributedStock);
+          // Find and update product (case-insensitive name match)
+          const product = await Product.findOne({
+            name: { $regex: new RegExp(`^${productName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') }
+          });
 
-              // Update distributed stock
-              const oldDistributed = product.distributedStock || 0;
-              const oldAvailable = product.availableStock;
+          if (product) {
+            console.log('📦 Found product:', product.name, 'Current stock:', product.availableStock, 'Distributed:', product.distributedStock);
 
-              product.distributedStock = oldDistributed + quantity;
-              product.availableStock = Math.max(0, oldAvailable - quantity);
+            const oldDistributed = product.distributedStock || 0;
+            const oldAvailable = product.availableStock || 0;
 
-              await product.save();
+            product.distributedStock = oldDistributed + quantity;
+            product.availableStock = Math.max(0, oldAvailable - quantity);
 
-              console.log(`✅ Updated product stock: ${productName}`);
-              console.log(`   - Available: ${oldAvailable} → ${product.availableStock}`);
-              console.log(`   - Distributed: ${oldDistributed} → ${product.distributedStock}`);
-              console.log(`   - Sold: ${quantity} ${unit}`);
-            } else {
-              console.log('❌ Product not found:', productName);
-            }
+            await product.save();
+
+            console.log(`✅ Updated product stock: ${product.name}`);
+            console.log(`   - Available: ${oldAvailable} → ${product.availableStock}`);
+            console.log(`   - Distributed: ${oldDistributed} → ${product.distributedStock}`);
+            console.log(`   - Sold: ${quantity}`);
           } else {
-            console.log('❌ Could not extract quantity from note:', note);
+            console.log('❌ Product not found by name:', productName);
           }
         } else {
           console.log('❌ Could not extract product name from note:', note);
         }
       } catch (error) {
         console.error('❌ Error updating product stock:', error);
-        // Don't fail the installment if product update fails
       }
     }
 
