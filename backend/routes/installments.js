@@ -877,6 +877,48 @@ router.post('/product-sale', protect, async (req, res) => {
       });
     }
 
+    // 🛡️ CRITICAL STOCK VALIDATION: Ensure all products have sufficient available stock
+    if (products && products.length > 0) {
+      for (const item of products) {
+        let productDoc = null;
+        if (item.productId) {
+          productDoc = await Product.findById(item.productId);
+        }
+        if (!productDoc && item.productName) {
+          const cleanName = item.productName.replace(/\s*\(Qty:.+$/, '').trim();
+          productDoc = await Product.findOne({ name: { $regex: new RegExp(`^${cleanName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') } });
+        }
+
+        if (productDoc) {
+          const requestedQty = parseFloat(item.quantity) || 1;
+          const available = productDoc.availableStock !== undefined ? productDoc.availableStock : (productDoc.totalStock || 0);
+
+          if (available < requestedQty) {
+            console.log(`❌ Insufficient stock for ${productDoc.name}: Available: ${available}, Requested: ${requestedQty}`);
+            return res.status(400).json({
+              success: false,
+              message: `"${productDoc.name}" এর পর্যাপ্ত স্টক নেই! বর্তমানে উপলব্ধ স্টক: ${available} টি, কিন্তু বিক্রির জন্য চাওয়া হয়েছে: ${requestedQty} টি।`,
+              messageEn: `Insufficient stock for "${productDoc.name}". Available: ${available}, Requested: ${requestedQty}`,
+              error: 'INSUFFICIENT_STOCK'
+            });
+          }
+        }
+      }
+    } else if (customProductName) {
+      const cleanName = customProductName.replace(/\s*\(Qty:.+$/, '').trim();
+      const productDoc = await Product.findOne({ name: { $regex: new RegExp(`^${cleanName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') } });
+      if (productDoc) {
+        const available = productDoc.availableStock !== undefined ? productDoc.availableStock : (productDoc.totalStock || 0);
+        if (available < 1) {
+          return res.status(400).json({
+            success: false,
+            message: `"${productDoc.name}" এর পর্যাপ্ত স্টক নেই! বর্তমানে স্টক শেষ (০)।`,
+            error: 'INSUFFICIENT_STOCK'
+          });
+        }
+      }
+    }
+
     // ✅ CRITICAL FIX: Check for duplicate ACTIVE product sales (not completed ones)
     if (products && products.length > 0) {
       const productNames = products.map(p => p.productName).join(', ');

@@ -106,6 +106,12 @@ const ProductSaleForm = ({ selectedMember, selectedBranch, selectedCollector, se
   const handleProductSelect = (product) => {
     if (!product) return;
 
+    const stock = product.availableStock !== undefined ? product.availableStock : (product.totalStock || 0);
+    if (stock <= 0) {
+      toast.error(`"${product.name}" এর স্টক শেষ (০)! এটি নির্বাচন করা যাবে না।`);
+      return;
+    }
+
     const isAlreadySelected = productSaleData.selectedProducts.some(item => item.product._id === product._id);
 
     if (!isAlreadySelected) {
@@ -131,7 +137,7 @@ const ProductSaleForm = ({ selectedMember, selectedBranch, selectedCollector, se
     }));
   };
 
-  // Update quantity for specific product
+  // Update quantity for specific product with strict stock limits
   const updateProductQuantity = (productId, newQuantity) => {
     if (newQuantity <= 0) return;
 
@@ -139,6 +145,17 @@ const ProductSaleForm = ({ selectedMember, selectedBranch, selectedCollector, se
       ...prev,
       selectedProducts: prev.selectedProducts.map(item => {
         if (item.product._id === productId) {
+          const maxStock = item.product.availableStock !== undefined ? item.product.availableStock : (item.product.totalStock || 0);
+          
+          if (newQuantity > maxStock) {
+            toast.error(`"${item.product.name}" এর পর্যাপ্ত স্টক নেই! সর্বোচ্চ উপলব্ধ স্টক: ${maxStock} টি`);
+            return {
+              ...item,
+              quantity: maxStock,
+              subtotal: item.product.unitPrice * maxStock
+            };
+          }
+
           return {
             ...item,
             quantity: newQuantity,
@@ -459,6 +476,19 @@ const ProductSaleForm = ({ selectedMember, selectedBranch, selectedCollector, se
       return;
     }
 
+    // 🛡️ Pre-submit stock validation
+    for (const item of productSaleData.selectedProducts) {
+      const maxStock = item.product.availableStock !== undefined ? item.product.availableStock : (item.product.totalStock || 0);
+      if (item.quantity > maxStock) {
+        toast.error(`"${item.product.name}" এর পর্যাপ্ত স্টক নেই! উপলব্ধ স্টক: ${maxStock} টি, কিন্তু চাওয়া হয়েছে: ${item.quantity} টি।`);
+        return;
+      }
+      if (maxStock <= 0) {
+        toast.error(`"${item.product.name}" এর স্টক শেষ (০)!`);
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     const loadingToast = toast.loading('Creating product sale...');
 
@@ -714,7 +744,12 @@ const ProductSaleForm = ({ selectedMember, selectedBranch, selectedCollector, se
                       <div className="space-y-3">
                         {/* Product Name and Remove Button */}
                         <div className="flex items-center justify-between">
-                          <h4 className="font-medium text-gray-800">{item.product.name}</h4>
+                          <div className="flex items-center flex-wrap gap-2">
+                            <h4 className="font-medium text-gray-800">{item.product.name}</h4>
+                            <span className="text-xs font-semibold px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full border border-blue-200">
+                              📦 Stock: {item.product.availableStock !== undefined ? item.product.availableStock : (item.product.totalStock || 0)}
+                            </span>
+                          </div>
                           <button
                             type="button"
                             onClick={() => removeProduct(item.product._id)}
@@ -743,7 +778,10 @@ const ProductSaleForm = ({ selectedMember, selectedBranch, selectedCollector, se
                           </div>
 
                           <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">Qty</label>
+                            <div className="flex justify-between items-center mb-1">
+                              <label className="block text-xs font-medium text-gray-600">Qty</label>
+                              <span className="text-[11px] text-gray-500">Max: {item.product.availableStock !== undefined ? item.product.availableStock : (item.product.totalStock || 0)}</span>
+                            </div>
                             <input
                               type="number"
                               value={item.quantity || ''}
@@ -753,6 +791,7 @@ const ProductSaleForm = ({ selectedMember, selectedBranch, selectedCollector, se
                               }}
                               className="w-full px-3 py-2 border border-gray-300 rounded text-center focus:ring-2 focus:ring-green-500"
                               min="1"
+                              max={item.product.availableStock !== undefined ? item.product.availableStock : (item.product.totalStock || 1)}
                               placeholder="Qty"
                             />
                           </div>
