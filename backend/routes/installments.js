@@ -1852,9 +1852,25 @@ router.post('/collect', protect, validateInstallmentCollection, async (req, res)
     const isSavingsDeposit = installmentType === 'extra' && note && note.includes('Savings Collection') && !note.includes('Product Sale');
 
     if (isSavingsWithdrawal) {
-      // ✅ FIX: Prevent negative savings
-      const currentSavings = member.totalSavings || 0;
+      // ✅ FIX: Compute true available savings from member record or fallback to history
+      let currentSavings = member.totalSavings || 0;
       const withdrawalAmount = parseFloat(amount);
+
+      if (currentSavings < withdrawalAmount) {
+        // Double-check from actual installment records for this member to be 100% accurate
+        const memberAllRecords = await Installment.find({
+          member: memberId,
+          installmentType: { $in: ['extra', 'savings'] }
+        });
+        const calcSavings = memberAllRecords.reduce((sum, rec) => {
+          if (!rec.note || rec.note.includes('Product Sale:')) return sum;
+          const isOut = rec.paymentMethod === 'savings_withdrawal' || (rec.note && rec.note.includes('Withdrawal'));
+          return sum + (isOut ? -rec.amount : rec.amount);
+        }, 0);
+        if (calcSavings > currentSavings) {
+          currentSavings = calcSavings;
+        }
+      }
 
       if (currentSavings < withdrawalAmount) {
         console.log(`❌ Withdrawal failed: Insufficient savings (${member.name}). Current: ৳${currentSavings}, Request: ৳${withdrawalAmount}`);
@@ -1865,7 +1881,7 @@ router.post('/collect', protect, validateInstallmentCollection, async (req, res)
       }
 
       // Deduct from totalSavings for withdrawals
-      member.totalSavings = currentSavings - withdrawalAmount;
+      member.totalSavings = Math.max(0, currentSavings - withdrawalAmount);
       console.log(`📤 Savings withdrawal recorded: ${member.name} - Amount: ৳${withdrawalAmount} - New Total: ৳${member.totalSavings}`);
     } else if (isSavingsDeposit) {
       // Add to totalSavings for collections

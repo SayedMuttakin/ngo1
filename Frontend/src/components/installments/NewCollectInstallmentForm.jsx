@@ -843,130 +843,35 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
       return;
     }
 
-    // ✅ CRITICAL VALIDATION: For withdrawal, check product-specific savings
-    // This MUST match the display logic exactly!
-    if (savingsType === 'out' && selectedInstallment) {
-      // ✅ REPLICATE DISPLAY LOGIC: Group installments by amount
-      const installmentsByAmount = {};
-      memberInstallments.forEach(inst => {
-        const instAmount = inst.amount || inst.remainingAmount;
-        if (!installmentsByAmount[instAmount]) {
-          installmentsByAmount[instAmount] = [];
-        }
-        installmentsByAmount[instAmount].push(inst);
-      });
-
-      // Sort descending (same as display)
-      const amountTypes = Object.keys(installmentsByAmount).map(Number).sort((a, b) => b - a);
-
-      // Find which group this installment belongs to
-      const selectedAmount = selectedInstallment.amount || selectedInstallment.remainingAmount;
-      const groupIndex = amountTypes.indexOf(selectedAmount);
-
-      console.log(`🔍 Installment amount: ৳${selectedAmount}, Group index: ${groupIndex} (0=Type 1, 1=Type 2)`);
-
-      // Get all savings records
-      const savingsRecords = allInstallmentRecords.filter(record => {
+    // ✅ VALIDATION: For withdrawal, check member's total available savings balance
+    if (savingsType === 'out') {
+      // Calculate total available savings for this member from all records
+      const calculatedSavings = (allInstallmentRecords || []).filter(record => {
         if (!(record.installmentType === 'extra' || record.installmentType === 'savings')) return false;
         if (!record.note) return false;
 
         const isSavingsCollection = record.note.includes('Savings Collection');
-        const isSavingsWithdrawal = record.note.includes('Savings Withdrawal');
-        const isInitialSavings = record.note.includes('Initial Savings');
+        const isSavingsWithdrawal = record.note.includes('Savings Withdrawal') || record.note.includes('Withdrawal');
+        const isInitialSavings = record.note.includes('Initial Savings') || record.note.includes('Registration');
         const isProductSaleRecord = record.note.match(/Product Sale:.+\(Qty:.+\|/);
 
         return (isSavingsCollection || isSavingsWithdrawal || isInitialSavings) && !isProductSaleRecord;
-      });
-
-      // Get installments for THIS group
-      const groupInstallments = groupIndex >= 0 ? installmentsByAmount[amountTypes[groupIndex]] : [];
-
-      // Calculate savings for THIS group (same logic as display)
-      let productSavings = savingsRecords.reduce((sum, record) => {
-        const belongsToGroup = groupInstallments.some(inst => {
-          if (record.distributionId && inst.originalInstallment?.distributionId) {
-            return record.distributionId === inst.originalInstallment.distributionId;
-          }
-          if (record.installmentId && inst.originalInstallment?._id) {
-            return record.installmentId === inst.originalInstallment._id;
-          }
-          if (record.note && inst.productName && record.note.includes(inst.productName)) {
-            return true;
-          }
-          return false;
-        });
-
-        if (belongsToGroup) {
-          const isWithdrawal = record.note.includes('Withdrawal');
-          return sum + (isWithdrawal ? -record.amount : record.amount);
-        }
-        return sum;
+      }).reduce((sum, record) => {
+        const isWithdrawal = record.note && (record.note.includes('Withdrawal') || record.paymentMethod === 'savings_withdrawal');
+        return sum + (isWithdrawal ? -record.amount : record.amount);
       }, 0);
 
-      // ✅ CRITICAL: Display shows SMALLER amount as Type 1!
-      // So initial savings go to the NON-zero index (NOT the largest amount)
-      // If there are only 2 types: index 0 = largest, index 1 = smallest (Type 1 in display)
-      const isDisplayedAsType1 = groupIndex === 1 || (groupIndex === 0 && amountTypes.length === 1);
+      const memberTotalSavings = (typeof selectedMember?.totalSavings === 'number' && selectedMember.totalSavings > 0)
+        ? Math.max(calculatedSavings, selectedMember.totalSavings)
+        : Math.max(0, calculatedSavings);
 
-      if (isDisplayedAsType1) {
-        // Add initial savings
-        const initialSavings = savingsRecords.filter(record =>
-          record.note && (record.note.includes('Initial Savings') || record.note.includes('Registration'))
-        ).reduce((sum, record) => sum + record.amount, 0);
+      console.log(`💰 Member Total Available Savings: ৳${memberTotalSavings} (Calculated: ৳${calculatedSavings}, Member DB: ৳${selectedMember?.totalSavings || 0})`);
 
-        // Add unmatched savings
-        const unmatchedSavings = savingsRecords.filter(record => {
-          if (!record.distributionId && !record.installmentId) {
-            const notMatched = !memberInstallments.some(inst => {
-              return (record.note && inst.productName && record.note.includes(inst.productName));
-            });
-            return notMatched && !record.note.includes('Initial Savings');
-          }
-          return false;
-        }).reduce((sum, record) => {
-          const isWithdrawal = record.note && record.note.includes('Withdrawal');
-          return sum + (isWithdrawal ? -record.amount : record.amount);
-        }, 0);
-
-        productSavings += initialSavings + unmatchedSavings;
-
-        // 🆕 SAVINGS TRANSFER: Add savings from completed products (fully paid products)
-        if (completedProductSales && completedProductSales.length > 0) {
-          const completedSavings = completedProductSales.reduce((sum, sale) => {
-            // Get all savings records for this completed product
-            const completedProductSavings = savingsRecords.filter(record => {
-              // Match by distributionId or product name
-              if (record.distributionId && record.distributionId === sale.distributionId) {
-                return true;
-              }
-              if (record.note && record.note.includes(sale.productName)) {
-                return true;
-              }
-              return false;
-            }).reduce((savSum, record) => {
-              const isWithdrawal = record.note && record.note.includes('Withdrawal');
-              return savSum + (isWithdrawal ? -record.amount : record.amount);
-            }, 0);
-
-            return sum + Math.max(0, completedProductSavings);
-          }, 0);
-
-          if (completedSavings > 0) {
-            console.log(`💸 Adding ৳${completedSavings} from ${completedProductSales.length} completed product(s) to Type 1`);
-            productSavings += completedSavings;
-          }
-        }
-
-        console.log(`💰 Type 1 Product ${selectedInstallment.productName} - Product-specific: ৳${productSavings - initialSavings - unmatchedSavings}, Initial: ৳${initialSavings}, Unmatched: ৳${unmatchedSavings}, Total: ৳${productSavings}`);
-      } else {
-        console.log(`💰 Type ${groupIndex + 1} Product ${selectedInstallment.productName} - Available Savings: ৳${productSavings}`);
-      }
-
-      if (amount > productSavings) {
+      if (amount > memberTotalSavings) {
         toast.error(
           `⚠️ Cannot withdraw ৳${amount.toLocaleString()}!\n` +
-          `Available savings for ${selectedInstallment.productName}: ৳${productSavings.toLocaleString()}\n` +
-          `Exceeds by: ৳${(amount - productSavings).toLocaleString()}`,
+          `Available total savings for ${selectedMember.name}: ৳${memberTotalSavings.toLocaleString()}\n` +
+          `Exceeds by: ৳${(amount - memberTotalSavings).toLocaleString()}`,
           { duration: 5000 }
         );
         return;
@@ -2162,11 +2067,37 @@ const NewCollectInstallmentForm = ({ selectedMember, selectedBranch, selectedCol
           <div className="fixed inset-0 bg-gradient-to-br from-black/30 to-gray-900/30 backdrop-blur-md flex items-center justify-center z-50">
             <div className="bg-white rounded-3xl p-8 w-full max-w-md mx-4 shadow-2xl border-2 border-purple-200">
               <h3 className="text-xl font-bold mb-4 text-gray-800">💰 Savings Transaction</h3>
-              <div className="mb-4">
-                <p className="text-gray-600 mb-2 font-medium">
-                  Member: {selectedMember.name}
-                </p>
-              </div>
+              {/* Member and Total Savings Display */}
+              {(() => {
+                const calculatedSavings = (allInstallmentRecords || []).filter(record => {
+                  if (!(record.installmentType === 'extra' || record.installmentType === 'savings')) return false;
+                  if (!record.note) return false;
+                  const isSavingsCollection = record.note.includes('Savings Collection');
+                  const isSavingsWithdrawal = record.note.includes('Savings Withdrawal') || record.note.includes('Withdrawal');
+                  const isInitialSavings = record.note.includes('Initial Savings') || record.note.includes('Registration');
+                  const isProductSaleRecord = record.note.match(/Product Sale:.+\(Qty:.+\|/);
+                  return (isSavingsCollection || isSavingsWithdrawal || isInitialSavings) && !isProductSaleRecord;
+                }).reduce((sum, record) => {
+                  const isWithdrawal = record.note && (record.note.includes('Withdrawal') || record.paymentMethod === 'savings_withdrawal');
+                  return sum + (isWithdrawal ? -record.amount : record.amount);
+                }, 0);
+                const currentTotalSavings = (typeof selectedMember?.totalSavings === 'number' && selectedMember.totalSavings > 0)
+                  ? Math.max(calculatedSavings, selectedMember.totalSavings)
+                  : Math.max(0, calculatedSavings);
+
+                return (
+                  <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-xl flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-gray-500 font-medium">Member</p>
+                      <p className="text-sm font-bold text-gray-800">{selectedMember.name}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-gray-500 font-medium">Total Savings (মোট সঞ্চয়)</p>
+                      <p className="text-base font-extrabold text-purple-700">৳{currentTotalSavings.toLocaleString()}</p>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Savings Type Selection */}
               <div className="mb-6">
