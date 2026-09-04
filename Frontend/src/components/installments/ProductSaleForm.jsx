@@ -115,11 +115,11 @@ const ProductSaleForm = ({ selectedMember, selectedBranch, selectedCollector, se
     const isAlreadySelected = productSaleData.selectedProducts.some(item => item.product._id === product._id);
 
     if (!isAlreadySelected) {
-      // Add to selection with default quantity 1
+      // Add to selection with empty quantity (user will type quantity)
       const newItem = {
         product: product,
-        quantity: 1,
-        subtotal: product.unitPrice * 1
+        quantity: '',
+        subtotal: 0
       };
 
       setProductSaleData(prev => ({
@@ -139,27 +139,60 @@ const ProductSaleForm = ({ selectedMember, selectedBranch, selectedCollector, se
 
   // Update quantity for specific product with strict stock limits
   const updateProductQuantity = (productId, newQuantity) => {
-    if (newQuantity <= 0) return;
+    if (newQuantity === '' || newQuantity === null || newQuantity === undefined) {
+      setProductSaleData(prev => ({
+        ...prev,
+        selectedProducts: prev.selectedProducts.map(item => {
+          if (item.product._id === productId) {
+            return {
+              ...item,
+              quantity: '',
+              subtotal: 0
+            };
+          }
+          return item;
+        })
+      }));
+      return;
+    }
+
+    const numQty = parseInt(newQuantity);
+    if (isNaN(numQty) || numQty <= 0) {
+      setProductSaleData(prev => ({
+        ...prev,
+        selectedProducts: prev.selectedProducts.map(item => {
+          if (item.product._id === productId) {
+            return {
+              ...item,
+              quantity: '',
+              subtotal: 0
+            };
+          }
+          return item;
+        })
+      }));
+      return;
+    }
 
     setProductSaleData(prev => ({
       ...prev,
       selectedProducts: prev.selectedProducts.map(item => {
         if (item.product._id === productId) {
           const maxStock = item.product.availableStock !== undefined ? item.product.availableStock : (item.product.totalStock || 0);
-          
-          if (newQuantity > maxStock) {
+
+          if (numQty > maxStock) {
             toast.error(`"${item.product.name}" এর পর্যাপ্ত স্টক নেই! সর্বোচ্চ উপলব্ধ স্টক: ${maxStock} টি`);
             return {
               ...item,
               quantity: maxStock,
-              subtotal: item.product.unitPrice * maxStock
+              subtotal: (parseFloat(item.product.unitPrice) || 0) * maxStock
             };
           }
 
           return {
             ...item,
-            quantity: newQuantity,
-            subtotal: item.product.unitPrice * newQuantity
+            quantity: numQty,
+            subtotal: (parseFloat(item.product.unitPrice) || 0) * numQty
           };
         }
         return item;
@@ -175,13 +208,14 @@ const ProductSaleForm = ({ selectedMember, selectedBranch, selectedCollector, se
       ...prev,
       selectedProducts: prev.selectedProducts.map(item => {
         if (item.product._id === productId) {
+          const qty = parseInt(item.quantity) || 0;
           return {
             ...item,
             product: {
               ...item.product,
               unitPrice: newUnitPrice
             },
-            subtotal: newUnitPrice * item.quantity
+            subtotal: newUnitPrice * qty
           };
         }
         return item;
@@ -476,11 +510,16 @@ const ProductSaleForm = ({ selectedMember, selectedBranch, selectedCollector, se
       return;
     }
 
-    // 🛡️ Pre-submit stock validation
+    // 🛡️ Pre-submit stock & quantity validation
     for (const item of productSaleData.selectedProducts) {
+      const qty = parseInt(item.quantity);
+      if (!qty || isNaN(qty) || qty <= 0 || item.quantity === '') {
+        toast.error(`"${item.product.name}" এর পরিমাণ (Quantity) বসান!`);
+        return;
+      }
       const maxStock = item.product.availableStock !== undefined ? item.product.availableStock : (item.product.totalStock || 0);
-      if (item.quantity > maxStock) {
-        toast.error(`"${item.product.name}" এর পর্যাপ্ত স্টক নেই! উপলব্ধ স্টক: ${maxStock} টি, কিন্তু চাওয়া হয়েছে: ${item.quantity} টি।`);
+      if (qty > maxStock) {
+        toast.error(`"${item.product.name}" এর পর্যাপ্ত স্টক নেই! উপলব্ধ স্টক: ${maxStock} টি, কিন্তু চাওয়া হয়েছে: ${qty} টি।`);
         return;
       }
       if (maxStock <= 0) {
@@ -784,15 +823,15 @@ const ProductSaleForm = ({ selectedMember, selectedBranch, selectedCollector, se
                             </div>
                             <input
                               type="number"
-                              value={item.quantity || ''}
+                              value={item.quantity !== undefined ? item.quantity : ''}
                               onChange={(e) => {
-                                const val = e.target.value;
-                                updateProductQuantity(item.product._id, val === '' ? 1 : parseInt(val));
+                                updateProductQuantity(item.product._id, e.target.value);
                               }}
-                              className="w-full px-3 py-2 border border-gray-300 rounded text-center focus:ring-2 focus:ring-green-500"
+                              className="w-full px-3 py-2 border border-gray-300 rounded text-center focus:ring-2 focus:ring-green-500 font-semibold"
                               min="1"
                               max={item.product.availableStock !== undefined ? item.product.availableStock : (item.product.totalStock || 1)}
-                              placeholder="Qty"
+                              placeholder="পরিমাণ"
+                              autoFocus
                             />
                           </div>
                         </div>
