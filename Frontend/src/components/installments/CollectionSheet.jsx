@@ -223,6 +223,9 @@ const CollectionSheet = ({ selectedCollector, selectedBranch, selectedDay, onGoB
                   // This is much more reliable than parsing the 'note' field.
                   const loanCollections = installmentData.filter(record =>
                     record.installmentType === 'regular' &&
+                    record.status !== 'correction' &&
+                    record.paymentMethod !== 'correction' &&
+                    record.amount > 0 &&
                     (record.status === 'collected' || record.status === 'partial')
                   );
 
@@ -401,12 +404,15 @@ const CollectionSheet = ({ selectedCollector, selectedBranch, selectedDay, onGoB
 
     // Step 1: Filter for actual loan installments (like form's loadMemberInstallments)
     const loanInstallments = installments.filter(record => {
+      // ❌ NEVER include correction records in the loan installments schedule
+      if (record.status === 'correction' || record.amount < 0 || record.installmentType === 'correction' || record.paymentMethod === 'correction') {
+        return false;
+      }
+
       const isLoanType = (record.installmentType === 'regular' && record.note && record.note.includes('Product Loan')) ||
         record.installmentType === 'loan';
 
       if (!isLoanType) return false;
-
-      // ... rest of filtering logic ...
 
       // Keep partial status
       if (record.status === 'partial') return true;
@@ -526,19 +532,24 @@ const CollectionSheet = ({ selectedCollector, selectedBranch, selectedDay, onGoB
     const finalProductList = [];
 
     for (const product of allProductsList) {
+      // Filter installments in product to only valid positive loan installments
+      const validInstallments = product.installments.filter(inst =>
+        inst.status !== 'correction' && inst.amount > 0 && inst.installmentType !== 'correction' && inst.paymentMethod !== 'correction'
+      );
+
       // Calculate paying status
-      const total = product.installments.reduce((sum, inst) => sum + inst.amount, 0);
+      const total = validInstallments.reduce((sum, inst) => sum + (inst.amount || 0), 0);
 
       // Calculate paid amount logic aligned with form
-      const paid = product.installments.reduce((sum, inst) => {
+      const paid = validInstallments.reduce((sum, inst) => {
         if ((inst.status === 'paid' || inst.status === 'partial' || inst.status === 'collected') &&
           (inst.paidAmount > 0 || inst.status === 'collected')) { // collected check for old records
 
           if (inst.status === 'partial') {
             return sum + (inst.paidAmount || 0);
           } else {
-            // For paid/collected: use original amount (assume full payment if old record)
-            return sum + inst.amount;
+            // For paid/collected: use paidAmount if present or original amount
+            return sum + (inst.paidAmount !== undefined && inst.paidAmount !== null ? inst.paidAmount : inst.amount);
           }
         }
         return sum;
@@ -550,10 +561,10 @@ const CollectionSheet = ({ selectedCollector, selectedBranch, selectedDay, onGoB
       // Using small threshold to handle floating point issues
       if (due > 0.01) {
         // Find generic details from first installment
-        const firstInst = product.installments[0];
+        const firstInst = validInstallments[0] || product.installments[0];
 
         // Calculate collection count (transactions)
-        const collectionCount = product.installments.filter(i =>
+        const collectionCount = validInstallments.filter(i =>
           i.status === 'paid' || i.status === 'collected' || i.status === 'partial'
         ).length;
 
@@ -567,11 +578,11 @@ const CollectionSheet = ({ selectedCollector, selectedBranch, selectedDay, onGoB
           paidAmount: paid,
           pendingAmount: due,
           installmentCount: collectionCount,
-          totalInstallments: product.installments.length,
-          installmentFrequency: firstInst.installmentFrequency || 'weekly',
-          deliveryDate: firstInst.saleDate || firstInst.dueDate || firstInst.createdAt, // ✅ FIX: Use saleDate (actual sale date) instead of dueDate (first installment date)
-          saleId: firstInst._id,
-          note: firstInst.note,
+          totalInstallments: validInstallments.length,
+          installmentFrequency: firstInst?.installmentFrequency || 'weekly',
+          deliveryDate: firstInst?.saleDate || firstInst?.dueDate || firstInst?.createdAt, // ✅ FIX: Use saleDate (actual sale date) instead of dueDate (first installment date)
+          saleId: firstInst?._id,
+          note: firstInst?.note,
           // ✅ NEW: Attach metadata map to allow looking up individual quantities for combined products
           metadataMap: productMetadataMap
         });
@@ -784,6 +795,11 @@ const CollectionSheet = ({ selectedCollector, selectedBranch, selectedDay, onGoB
 
       allRecords.forEach(record => {
         if (!record) return;
+
+        // Skip correction records (they are not loan installments or savings)
+        if (record.status === 'correction' || record.amount < 0 || record.installmentType === 'correction' || record.paymentMethod === 'correction') {
+          return;
+        }
 
         // Skip if already processed (prevent duplicates)
         const recordId = record._id || record.id || `${record.amount}-${record.note}-${record.createdAt}`;
